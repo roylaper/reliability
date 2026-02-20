@@ -1,0 +1,2006 @@
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Polynomial Secret Sharing and the Lagrange Basis
+Written by Ittai Abraham, Alin Tomescu
+Posted on July 17, 2020
+In this post, we highlight an amazing result: Shamir’s secret sharing scheme. This is one of the most powerful uses of polynomials over a finite field in distributed computing. Intuitively, this scheme allows a Dealer
+ to commit to a secret s
+ by splitting it into shares distributed to n
+ parties. The secret is hidden and requires a threshold of f+1
+ parties in order to be reconstructed, where f<n
+.
+
+In the basic scheme, we will assume a passive adversary that controls any f
+ out of the n
+ parties. A passive adversary (sometimes called Honest-But-Curious or Semi-Honest) does not deviate from the protocol but can learn all possible information from its view: i.e., the messages received by parties it controls. In the follow up posts, we extend the secret sharing scheme to crash adversaries, the BGW VSS with malicious adversaries, and highlight the additivity of polynomial secret sharing.
+
+A secret sharing scheme is composed of two protocols: Share and Reconstruct. These protocols are distributed: they are run by the n
+ parties, jointly. The Dealer has a secret s
+, which is given as input to the Share protocol. Intuitively, if the Share protocol “succeeds”, then the Reconstruct protocol will output that same secret s
+.
+
+These properties of a secret sharing scheme can be described more formally as:
+
+Binding: Once the first non-faulty party completes the Share protocol, there exists some value r
+ such that r
+ is the output value of all non-faulty parties that complete the Reconstruct protocol.
+
+Validity: If the Dealer is non-faulty, then the output of the Reconstruct protocol is the Dealer’s input value s
+.
+
+Hiding: If the dealer is non-faulty, and no honest party has begun the Reconstruct protocol, then the adversary can gain no information about s
+.
+
+The first two properties seem well defined, but what about the hiding property? What does it mean that the adversary “gains no information about s
+”? We will be more formal about this later but, informally, this means that anything the adversary can output by interacting with this protocol, the adversary could have output the same without any interaction at all.
+
+Shamir’s scheme
+We enumerate the parties via the integers {1,2,3,…,n}
+. We also assume there is a commonly known finite field 𝔽p
+ with p>n
+.
+
+Share protocol: Given a secret s
+ as input, the Dealer randomly chooses f
+ values p1,…,pf∈R𝔽p
+ and defines a degree ≤f
+ polynomial
+
+p(X)=s+p1X+⋯+pfXf(1)
+The Dealer then sends p(i)
+ to each party i
+. We refer to p(i)
+ as party i
+’s share of the secret s
+.
+
+Important: The Dealer’s secret s
+ is “stored” in the polynomial as p(0)=s
+.
+
+Reconstruct protocol: Each party i
+ sends its share p(i)
+ to all other parties. Each party receives all the shares p(1),…,p(n)
+ and outputs the Dealer’s original secret s
+ as follows:
+
+s=p(0)=∑i∈Iλip(i)(2)
+Here, I
+ is the subset of parties whose shares are used to reconstruct s
+. Specifically, I
+ can be any (f+1)
+-sized subset of {1,2,…,n}
+ but, for simplicity, let us stick to I={1,…,f+1}
+. Furthermore:
+
+λi=∏j∈I∖{i}j∏j∈I∖{i}(j−i)(3)
+This looks like magic, no? No worries. We explain how this reconstruction of the secret s
+ from the parties’ shares works next.
+
+Lagrange Basis
+Lets dig deeper into how and why the values λ1,…,λf+1
+ are defined. As mentioned before, we could have used any set of f+1
+ shares to reconstruct the secret.
+
+For any set Z={z1,…,zf+1}
+ of size f+1
+ we can define the Lagrange basis for degree-at-most-f
+ polynomials as follows:
+
+For every z∈Z
+, let z:Z↦{0,1}
+ be the indicator function such that:
+
+z(x)={1, if x=z0, if x≠z(4)
+We can then extend this function z(x)
+ to a function Lz:𝔽p↦𝔽p
+, such that for all x∈Z: z(X)=Lz(X)
+ by defining Lz(X)
+ as a degree f
+ polynomial!
+
+Lz(X)=∏j∈Z∖{z}(X−j)∏j∈Z∖{z}(z−j)(5)
+Take a moment to verify the equality on all x∈Z
+. This seemingly simple idea of extending a function from Z↦{0,1}
+ to a low degree polynomial is a very powerful tool! It and its generalization to multivariate polynomials form the basis of many results in computer science.
+
+We can now claim that, for any degree f
+ polynomial p
+, we have:
+
+p(X)=∑z∈ZLz(X)p(z)(6)
+Why does this equality hold? It’s because both p(X)
+ and ∑z∈ZLz(X)p(z)
+ are degree-at-most-f
+ polynomials so their difference is also of degree-at-most-f
+ and has f+1
+ zeros, since |Z|=f+1
+. From the main theorem in our previous post on polynomials, this means that p(X)−∑z∈ZLz(X)p(z)
+ must be the zero polynomial. Thus, p(X)=∑z∈ZLz(X)p(z)
+ follows from the fact that non-trivial degree-at-most-f
+ polynomials have at most d
+ roots!
+
+This argument shows that there is a unique representation of p=(p0,…,pf)
+ for the Lagrange basis induced by Z={z1,…,zf+1}
+. Specifically, this representation is (p(z1),…,p(zf+1))
+.
+
+Let ϕ(p0,…,pf)=(p(z1),…,p(zf+1))
+ for Z={z1,…,zf+1}
+.
+
+Claim: ϕ
+ is a bijective map from the set of degree-at-most-f
+ polynomials to their evaluations at the points in Z
+, where |Z|=f+1
+.
+
+Proof. To show that ϕ:𝔽f+1p↦𝔽f+1p
+ is bijective, it is enough to show that ϕ
+’s domain and image are of the same size and that ϕ
+ is injective.
+
+Since ϕ
+ takes as input degree-at-most-f
+ polynomials with coefficients over 𝔽p
+, there are exactly |𝔽𝕡|f+1=pf+1
+ such polynomials. In other words, ϕ
+’s domain is 𝔽f+1p
+. Also, since its image is the set of all possible f+1
+ evaluations (p(z1),…,p(zf+1))
+, with each evaluation being an element of 𝔽p
+, it follows that ϕ
+’s image is exactly 𝔽f+1p
+. Thus, ϕ
+’s domain is of the same size as its image.
+
+To show that ϕ
+ is injective, assume the opposite. This means there exist two polynomials p=(p0,…,pf)
+ and p′=(p′0,…,p′f)
+ such that p≠p′
+, but ϕ(p0,…,pf)=ϕ(p′0,…,p′f)
+ which means p(z)=p′(z),∀z∈Z
+. Since |Z|=f+1
+, this implies that p−p′
+ is a degree-at-most-f
+ polynomial that has at least f+1
+ zeros. From the main theorem of our previous post, this means that p−p′=0
+ and hence p=p′
+. This is a contradiction. Therefore, ϕ
+ is injective.
+
+We conclude that ϕ
+ is bijective. In fact ϕ
+ is a linear isomorphism and so Lz1,…,Lzf+1
+ is a basis for the set of degree-at-most-f
+ polynomials (for any set Z={z1,…,zf+1}
+).
+
+We can now use our new insights to prove the secret sharing properties.
+
+Proof of the Secret Sharing properties
+Proof for Binding and Validity:
+
+Since the adversary is passive, all we need to do is show that indeed all parties will output s
+. Recall that the Reconstruct protocol outputs:
+
+p(0)=∑1≤i≤f+1λip(i)(7)
+where
+
+λi=∏j∈{1,…,f+1}∖{i}j∏j∈{1,…,f+1}∖{i}(j−i)(8)
+Here, we are restricting ourselves to reconstructing from parties 1,2,…,f+1
+, but this works for any set of parties Z⊆{1,2,…,n}
+ with |Z|=f+1
+.
+
+The proof follows directly from the fact that p(X)=∑1≤i≤f+1Li(X)p(i)
+ and so p(0)=∑1≤i≤f+1Li(0)p(i)=∑1≤i≤f+1λip(i)=s
+, where p(i)
+ is the share of party i
+.
+
+Recall that the Lagrange polynomial Li(X)
+ is defined w.r.t. the set of parties Z
+ as Li(X)=∏j∈Z∖{i}X−ji−j
+ and that λi=Li(0)
+.
+
+Proof of Hiding:
+
+Let’s define the view of an adversary that controls the parties B={b1,…,bf}
+ as the messages that the adversary sees during the Share protocol. In our case, this is just {p(b1),…,p(bf)}
+, which are the shares that the parties in B
+ receive from the Dealer during the Share protocol.
+
+To prove the hiding property, we will show that, no matter what the secret s
+ is, the distribution of the view of the adversary is a uniform distribution.
+
+We have shown above that ϕ
+ is a bijective mapping from p0,…,pf
+ to p(z1),…,p(zf+1)
+ for any set Z={z1,…,zf+1}
+.
+
+Claim: For any Z={z0,z1,z2,…,zf}
+, ϕ
+ maps the uniform distribution 
+ on p=(p0,p1,…,pf)
+ to the uniform distribution on p(z0),p(z1),…,p(zf)
+.
+
+Proof: For any w0,…,wf∈𝔽f+1p
+, by definition of the uniform distribution we have:
+
+Prp∼[(p0,p1,…,pf)=(w0,w1,…,wf)]=1/|𝔽p|f+1(9)
+
+We want to show that, ∀y0,…,yf∈𝔽f+1p
+:
+
+Prp∼[(p(z0),p(z1),…,p(zf))=(y0,y1,…,yf)]=1/|𝔽p|f+1(10)
+
+We can apply the isomorphism ϕ−1
+ inside this probability and get:
+
+ ==Prp∼[(p(z0),p(z1),…,p(zf))=(y0,y1,…,yf)]=Prp∼[ϕ−1(p(z0),p(z1),…,p(zf))=ϕ−1(y0,y1,…,yf)]=Prp∼[(p0,p1…,pf)=(a0,a1,…,af)](11)(12)(13)
+
+Here, (a0,a1,…,af)=ϕ−1(y0,y1,…,yf)
+.
+
+Fortunately, we know from Equation 9
+ that, for any a0,a1,…,af∈𝔽p
+, Prp∼[(p0,p1…,pf)=(a0,a1,…,af)]=1/|𝔽|f+1p
+. It therefore follows that Equation 10
+ holds.
+
+Now, consider the set Z={0}∪B
+, where B={b1,…,bf}
+ is the set of parties controlled by the passive adversary. (Here, we use the assumption that party identities start from 1.)
+
+Observe that, since 0∈Z
+, the first output of ϕ
+ is p(0)=p0
+, which matches the first input of ϕ
+, which is p0
+.
+
+From the above observation, we immediately get that for any fixed s=p0
+, ϕ
+ must map the uniform distribution on p1,…,pf
+ to the uniform distribution on p(b1),…,p(bf)
+.
+
+Since, for any input s=p0
+, the Dealer uses the uniform distribution to pick the coefficients p1,…,pf
+, then for any input s
+ the view of the adversary p(b1),…,p(bf)
+ is also uniformly distributed!
+
+In what sense does this mean that the adversary learns nothing about the secret s=p(0)=p0
+? In the sense that, no matter what the secret is, the distribution of the view of the adversary is the same and is independent of the actual secret.
+
+In other words, anything the adversary could learn by observing the distribution of its views, it could learn by just sampling from this distribution without any interaction.
+
+Notes
+The adversary in this post is passive, so the main challenge is in the hiding property. The binding propoerty will be less trivial in future posts about stronger adversaries. See our follow-up post on the Byzantine case.
+In the share protocol we rather arbitrarily used the integers from 1 to n
+ as the shares sent to parties 1 to n
+. In fact one can use any fixed set w1,…,wn
+ of field elements. Since in many cases we want to use FFT it is often beneficial to use roots of unity and set wiωi
+, so party i
+ gets the share P(ωi)
+.
+Please leave comments on Twitter.
+
+Tags: cryptography101
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+J. Cryptology 1(1), 1988, pp. 65-75.
+
+ 
+
+The Dining Cryptographers Problem:
+Unconditional Sender and Recipient Untraceability
+ 
+
+David Chaum
+Centre for Mathematics and Computer Science, Kruislan 413, 1098 SJ Amsterdam, The Netherlands
+
+Abstract. Keeping confidential who sends which messages, in a world where any physical transmission can be traced to its origin, seems impossible. The solution presented here is unconditionally or cryptographically secure, depending on whether it is based on one-time-use keys or on public keys, respectively. It can be adapted to address efficiently a wide variety of practical considerations.
+
+Key words. Untraceability, Unconditional Security, Pseudonymity.
+
+
+Introduction
+Three cryptographers are sitting down to dinner at their favorite three-star restaurant. Their waiter informs them that arrangements have been made with the maitre d'hotel for the bill to be paid anonymously. One of the cryptographers might be paying for the dinner, or it might have been NSA (U.S. National Security Agency). The three cryptographers respect each other's right to make an anonymous payment, but they wonder if NSA is paying. They resolve their uncertainty fairly by carrying out the following protocol:
+Each cryptographer flips an unbiased coin behind his menu, between him and the cryptographer on his right, so that only the two of them can see the outcome. Each cryptographer then states aloud whether the two coins he can see--the one he flipped and the one his left-hand neighbor flipped--fell on the same side or on different sides. If one of the cryptographers is the payer, he states the opposite of what he sees. An odd number of differences uttered at the table indicates that a cryptographer is paying; an even number indicates that NSA is paying (assuming that the dinner was paid for only once). Yet if a cryptographer is paying, neither of the other two learns anything from the utterances about which cryptographer it is.
+
+To see why the protocol is unconditionally secure if carried out faithfully, consider the dilemma of a cryptographer who is not the payer and wishes to find out which cryptographer is. (If NSA pays, there is no anonymity problem.) There are two cases. In case (1) the two coins he sees are the same, one of the other cryptographers said "different," and the other one said "same." If the hidden outcome was the same as the two outcomes he sees, the cryptographer who said "different" is the payer; if the outcome was different, the one who said "same" is the payer. But since the hidden coin is fair, both possibilities are equally likely. In case (2) the coins he sees are different; if both other cryptographers said "different," then the payer is closest to the coin that is the same as the hidden coin; if both said "same," then the payer is closest to the coin that differs from the hidden coin. Thus, in each subcase, a nonpaying cryptographer learns nothing about which of the other two is paying.
+
+The cryptographers become intrigued with the ability to make messages public untraceably. They devise a way to do this at the table for a statement of arbitrary length: the basic protocol is repeated over and over; when one cryptographer wishes to make a message public, he merely begins inverting his statements in those rounds corresponding to 1's in a binary coded version of his message. If he notices that his message would collide with some other message, he may for example wait a number of rounds chosen at random from a suitable distribution before trying to transmit again.
+
+1. Generalizing the Approach
+During dinner, the cryptographers also consider how any number of participants greater than one can carry out a version of the protocol. (With two participants, only nonparticipant listeners are unable to distinguish between the two potential senders.) Each participant has a secret key bit in common with, say, every other participant. Each participant outputs the sum, modulo two, of all the key bits he shares, and if he wishes to transmit, he inverts his output. If no participant transmits, the modulo two sum of the outputs must be zero, since every key bit enters exactly twice; if one participant transmits, the sum must be one. (In fact, any even number of transmitting participants yields zero, and any odd number yields one.) For j rounds, each participant could have a j-bit key in common with every other participant, and the ith bit of each such key would be used only in the ith round. Detected collision of messages leads to attempted retransmission as described above; undetected collision results only from an odd number of synchronized identical message segments. (Generalization to fields other than GF(2) is possible, but seems to offer little practical advantage.)
+Other generalizations are also considered during dinner. The underlying assumptions are first made explicit, including modeling key-sharing arrangements as graphs. Next, the model is illustrated with some simple examples. The potential for cooperations of participants to violate the security of others is then looked at. Finally, a proof of security based on systems of linear equations is given.
+
+
+1.1. Model
+Each participant is assumed to have two kinds of secret: (a) the keys shared with other participants for each round; and (b) the inversion used in each round (i.e., a 1 if the participant inverts in that round and a 0 if not). Some or all of a participant's secrets may be given to other participants in various forms of collusion, discussion of which is postponed until Section 1.3. (For simplicity in exposition, the possibility of secrets being stolen is ignored throughout.)
+The remaining information about the system may be described as: (a) who shares keys with whom; and (b) what each participant outputs during each round (the modulo two sum of that participant's keys and inversion). This information need not be secret to ensure untraceability. If it is publicly known and agreed, it allows various extensions discussed in Sections 2.5 and 2.6. The sum of all the outputs will, of course, usually become known to all participants.
+
+In the terminology of graphs, each participant corresponds to a vertex and each key corresponds to an edge. An edge is incident on the vertices corresponding to the pair of participants that shares the corresponding key. From here on, the graph and dinner-table terminologies will be used interchangeably. Also, without loss of generality, it will be assumed that the graph is connected (i.e., that a path exists between every pair of vertices), since each connected component (i.e., each maximal connected subgraph) could be considered a separate untraceable-sender system.
+
+An anonymity set seen by a set of keys is the set of vertices in a connected component of the graph formed from the original graph by removing the edges concerned. Thus a set of keys sees one anonymity set for each connected partition induced by removing the keys. The main theorem of Section 1.4 is essentially that those having only the public information and a set of keys seeing some anonymity set can learn nothing about the members of that anonymity set except the overall parity of their inversions. Thus, for example, any two participants connected by at least one chain of keys unknown to an observer are both in the same anonymity set seen by the observer's keys, and the observer gains nothing that would help distinguish between their messages.
+
+
+1.2. Some Examples
+A few simple consequences of the above model may be illustrative. The anonymity set seen by the empty set (i.e., by a nonparticipant observer) is the set of all vertices, since the graph is assumed connected and remains so after zero edges are removed. Also, the anonymity sets seen by the full set of edges are all singleton sets, since each vertex's inversion is just the sum of its output and the corresponding key bits.
+If all other participants cooperate fully against one, of course no protocol can keep that singleton's messages untraceable, since untraceability exists only among a set of possible actors, and if the set has only one member, its messages are traceable. For similar reasons, if a participant believes that some subset of other participants will fully cooperate against him, there is no need for him to have keys in common with them.
+
+A biconnected graph (i.e., a graph with at least two vertex-disjoint paths between every pair of vertices) has no cut-vertices (i.e., a single vertex whose removal partitions the graph into disjoint subgraphs). In such a graph, the set of edges incident on a vertex v sees (apart from v) one anonymity set containing all other vertices, since there is a path not containing v between every pair of vertices, and thus they form a connected subgraph excluding v; each participant acting alone learns nothing about the contribution of other participants.
+
+
+1.3. Collusion of Participants
+Some participants may cooperate by pooling their keys in efforts to trace the messages of others; such cooperation will be called collusion. For simplicity, the possibilities for multiple collusions or for pooling of information other than full edges will be ignored. Colluders who lie to each other are only touched on briefly, in Section 2.6.
+Consider collusion in a complete graph. A vertex is only seen as a singleton anonymity set by the collection of all edges incident on it; all other participants must supply the key they share with a participant in order to determine that participant's inversions. But since a collusion of all but one participant can always trace that participant merely by pooling its members' inversions as already mentioned, it gains nothing more by pooling its keys. The nonsingleton anonymity set seen by all edges incident on a colluding set of vertices in a complete graph is the set of all other vertices; again, a collusion yields nothing more from pooling all its keys than from pooling all its inversions.
+
+Now consider noncomplete graphs. A full collusion is a subset of participants pooling all of their keys. The pooled keys see each colluder as a singleton anonymity set; the colluders completely sacrifice the untraceability of their own messages. If a full collusion includes a cut- set of vertices (i.e., one whose removal partitions the graph), the collusion becomes nontrivial because it can learn something about the origin of messages originating outside the collusion; the noncolluding vertices are partitioned into disjoint subgraphs, which are the anonymity sets seen by the pooled keys.
+
+Members of a partial collusion pool some but not all of their keys. Unlike the members of a full collusion, each member of a partial collusion in general has a different set of keys. For it to be nontrivial, a partial collusion's pooled keys must include the bridges or separating edges of a segregation or splitting of the graph (i.e., those edges whose removal would partition the graph). Settings are easily constructed in which the pooled keys see anonymity sets that partition the graph and yet leave each colluder in a nonsingleton partition seen by any other participant. Thus, colluders can join a collusion without having to make themselves completely traceable to the collusion's other members.
+
+
+1.4. Proof of Security
+Consider, without loss of generality, a single round in which say some full collusion knows some set of keys. Remove the edges known to the collusion from the key-sharing graph and consider any particular connected component C of the remaining graph. The vertices of C thus form an anonymity set seen by the pooled keys.
+Informally, what remains to be shown is that the only thing the collusion learns about the members of C is the parity sum of their inversions. This is intuitively apparent, since the inversions of the members of C are each in effect hidden from the collusion by one or more unknown key bits, and only the parity of the sum of these key bits is known (to be zero). Thus the inversions are hidden by a one-time pad, and only their parity is revealed, because only the parity of the pad is known.
+
+The setting is formalized as follows: the connected component C is comprised of rn vertices and n edges. The incidence matrix M of C is defined as usual, with the vertices labeling the rows and the edges labeling the columns. Let K, I, and A be stochastic variables defined on GF(2)^n, GF(2)^m, and GF(2)^m, respectively, such that K is uniformly distributed over GF(2)^n, K and I are mutually independent, and A = (MK) cross I. In terms of the protocol, K comprises the keys corresponding to the edges, I consists of the inversions corresponding to the vertices, and A is formed by the outputs of the vertices. Notice that the parity of A (i.e., the modulo two sum of its components) is always equal to the parity of I, since the columns of M each have zero parity. The desired result is essentially that A reveals no more information about I than the parity of 1. More formally:
+
+Theorem. Let a be in GF(2)^n. For each i in GF(2)^n, which is assumed by I with nonzero probability and which has the same parity as a, the conditional probability that A = a given that I = i is 2^(1 - m). Hence, the conditional probability that I = i given that A = a is the a priori probability that I = i.
+
+Proof. Let i be an element of GF(2)^n have the same parity as a. Consider the system of linear equations (MK) cross i = a, in k an element of GF(2)^n. Since the columns of M each have even parity, as mentioned above, its rows are linearly dependent over GF(2)^m. But as a consequence of the connectedness of the graph, every proper subset of rows of M is linearly independent. Thus, the rank of M is m - 1, and so each vector with zero parity can be written as a linear combination of the columns of M. This implies that the system is solvable because i cross a has even parity. Since the set of n column vectors of M has rank m - 1, the system has exactly 2^(n - m + 1) solutions.
+
+Together with the fact that K and I are mutually independent and that K is uniformly distributed, the theorem follows easily.
+
+
+2. Some Practical Considerations
+After dinner, while discussing how they can continue to make untraceable statements from this respective homes, the cryptographers take up a variety of other topics. In particular, they consider different ways to establish the needed keys; debate adapting the approach to various kinds of communication networks; examine the traditional problems of secrecy and authentication in the context of a system that can provide essentially optimal untraceability; address denial of service caused by malicious and devious participants; and propose means to discourage socially undesirable messages from being sent.
+
+2.1. Establishing Keys
+One way to provide the keys needed for longer messages is for one member of each pair to toss many coins in advance. Two identical copies of the resulting bits are made, say each on a separate optical disk. Supplying one such disk (which today can hold on the order of 10^10 bits) to a partner provides enough key bits to allow people to type messages at full speed for years. If participants are not transmitting all the time, the keys can be made to last even longer by using a substantially slower rate when no message is being sent; the full rate would be invoked automatically only when a 1 bit indicated the beginning of a message. (This can also reduce the bandwidth requirements discussed in Section 2.2.)
+Another possibility is for a pair to establish a short key and use a cryptographic pseudorandom-sequence generator to expand it as needed. Of course this system might be broken if the generator were broken. Cryptanalysis may be made more difficult, however, by lack of access to the output of individual generators. Even when the cryptographers do not exchange keys at dinner, they can safely do so later using a public-key distribution system (first proposed by [4] and [3]).
+
+
+2.2 Underlying Communication Techniques
+A variety of underlying communication networks can be used, and their topology need not be related to that of the key-sharing graph.
+Communication systems based on simple cycles, called rings, are common in local area networks. In a typical ring, each node receives each bit and passes it round-robin to the next node. This technology is readily adapted to the present protocols. Consider a single-bit message like the "I paid" message originally sent at the dinner table. Each participant exclusive-or's the bit he receives with his own output before forwarding it to the next participant. When the bit has traveled full circle, it is the exclusive-or sum of all the participants' outputs, which is the desired result of the protocol. To provide these messages to all participants, each bit is sent around a second time by the participant at the end of the loop.
+
+Such an adapted ring requires, on average, a fourfold increase in bandwidth over the obvious traceable protocols in which messages travel only halfway around on average before being taken off the ring by their recipients. Rings differ from the dinner table in that several bit- transmission delays may be required before all the outputs of a particular round are known to all participants; collisions are detected only after such delays.
+
+Efficient use of many other practical communication techniques requires participants to group output bits into blocks. For example, in high-capacity broadcast systems, such as those based on coaxial cable, surface radio, or satellites, more efficient use of channel capacity is obtained by grouping a participant's contribution into a block about the size of a single message (see, e.g., [5]). Use of such communication techniques could require an increase in bandwidth on the order of the number of participants.
+
+In a network with one message per block, the well-known contention protocols can be used: time is divided evenly into frames; a participant transmits a block during one frame; if the block was garbled by collision (presumably with another transmitted block), the participant waits a number of frames chosen at random from some distribution before attempting to retransmit; the participants' waiting intervals may be adjusted on the basis of the collision rate and possibly of other heuristics [5].
+
+In a network with many messages per block, a first block may be used by various anonymous senders to request a "slot reservation" in a second block. A simple scheme would be for each anonymous sender to invert one randomly selected bit in the first block for each slot they wish to reserve in the second block. After the result of the first block becomes known, the participant who caused the ith 1 bit in the first block sends in the ith slot of the second block.
+
+
+2.3. Example Key-Sharing Graphs
+In large systems it may be desirable to use fewer than the m(m - 1)/2 keys required by a complete graph. If the graph is merely a cycle, then individuals acting alone learn nothing, but any two colluders can partition the graph, perhaps fully compromising a participant immediately between them. Such a topology might nevertheless be adequate in an application in which nearby participants are not likely to collude against one another.
+A different topology assumes the existence of a subset of participants who each participant believes are sufficiently unlikely to collude, such as participants with conflicting interests. This subset constitutes a fully connected subgraph, and the other participants each share a key with every member of it. Every participant is then untraceable among all the others, unless all members of the completely connected subset cooperate. (Such a situation is mentioned again in Section 3.)
+
+If many people wish to participate in an untraceable communication system, hierarchical arrangements may offer further economy of keys. Consider an example in which a representative from each local fully connected subgraph is also a member of the fully connected central subgraph. The nonrepresentative members of a local subgraph provide the sum of their outputs to their representative. Representatives would then add their own contributions before providing the sum to the central subgraph. Only a local subgraph's representative, or a collusion of representatives from all other local subgraphs, can recognize messages as coming from the local subgraph. A collusion comprising the representative and all but one nonrepresentative member of a local subgraph is needed for messages to be recognized as coming from the remaining member.
+
+
+2.4. Secrecy and Authentication
+What about the usual cryptologic problems of secrecy and authentication?
+A cryptographer can ensure the secrecy of an anonymous message by encrypting the message with the intended recipient's public key. (The message should include a hundred or so random bits to foil attempts to confirm a guess at its content [1].) The sender can even keep the identity of the intended recipient secret by leaving it to each recipient to try to decrypt every message. Alternatively, a prearranged prefix could be attached to each message so that the recipient need only decrypt messages with recognized prefixes. To keep even the multiplicity of a prefix's use from being revealed, a different prefix might be used each time. New prefixes could be agreed in advance, generated cryptographically as needed, or supplied in earlier messages.
+
+Authentication is also quite useful in systems without identification. Even though the messages are untraceable, they might still bear digital signatures corresponding to public-key "digital pseudonyms" [1]; only the untraceable owner of such a pseudonym would be able to sign subsequent messages with it. Secure payment protocols have elsewhere been proposed in which the payer and/or the payee might be untraceable [2]. Other protocols have been proposed that allow individuals known only by pseudonyms to transfer securely information about themselves between organizations [2]. All these systems require solutions to the sender untraceability problem, such as the solution presented here, if they are to protect the unlinkability of pseudonyms used to conduct transactions from home.
+
+
+2.5. Disruption
+Another question is how to stop participants who, accidentally or even intentionally, disrupt the system by preventing others from sending messages. In a sense, this problem has no solution, since any participant can send messages continuously, thereby clogging the channel. But nondisupters can ultimately stop disruption in a system meeting the following requirements: (1) the key-sharing graph is publicly agreed on; (2) each participant's outputs are publicly agreed on in such a way that participants cannot change their output for a round on the basis of other participants' outputs for that round; and (3) some rounds contain inversions that would not compromise the untraceability of any nondisrupter.
+The first requirement has already been mentioned in Section 1.1, where it was said that this information need not be secret; now it is required that this information actually be made known to all participants and that the participants agree on it.
+
+The second requirement is in part that disrupters be unable (at least with some significant probability) to change their output after hearing other participants' outputs. Some actual channels would automatically ensure this, such as broadcast systems in which all broadcasts are made simultaneously on different frequencies. The remainder of the second requirement, that the outputs be publicly agreed on, might also be met by broadcasting. Having only channels that do not provide it automatically, an effective way to meet the full second requirement would be for participants to "commit" to their outputs before making them. One way to do this is for participants to make public and agree on some (possibly compressing and hierarchical, see Section 2.6) one-way function of their outputs, before the outputs are made public. The third requirement is that at least some rounds can be contested (i.e., that all inversions can be made public) without compromising the untraceability of non-disrupting senders. The feasibility of this will be demonstrated here by a simple example protocol based on the slot reservation technique already described in Section 2.2.
+
+Suppose that each participant is always to make a single reservation in each reserving block, whether or not he actually intends to send a message. (Notice that, because of the "birthday paradox," the number of bits per reserving block must be quadratic in the number of participants.) A disrupted reserving block would then with very high probability have Hamming weight unequal to the number of participants. All bits of such a disrupted reserving block could be contested without loss of untraceability for nondisrupters.The reserved blocks can also be made to have such safely contestable bits if participants send trap messages. To lay a trap, a participant first chooses the index of a bit in some reserving block, a random message, and a secret key. Then the trapper makes public an encryption, using the secret key, of both the bit index and the random message. Later, the trapper reserves by inverting in the round corresponding to the bit index, and sends the random message in the resulting reserved slot. If a disrupter is unlucky enough to have damaged a trap message, then release of the secret key by the trapper would cause at least one bit of the reserved slot to be contested.
+
+With the three requirements satisfied, it remains to be shown how if enough disrupted rounds are contested, the disrupters will be excluded from the network.
+
+Consider first the case of a single participant's mail computer disrupting the network. If it tells the truth about contested key bits it shares (or lies about an even number of bits), the disrupter implicates itself, because its contribution to the sum is unequal to the sum of these bits (apart from any allowed inversion). If, on the other hand, the single disrupter lies about some odd number of shared bits, the values it claims will differ from those claimed for the same shared bits by the other participants sharing them. The disrupter thereby casts suspicion on all participants, including itself, that share the disputed bits. (It may be difficult for a disrupter to cast substantial suspicion on a large set of participants, since all the disputed bits will be in common with the disrupter.) Notice, however, that participants who have been falsely accused will know that they have been--and by whom--and should at least refuse to share bits with the disrupter in the future.
+
+Even with colluding multiple disrupters, at least one inversion must be revealed as illegitimate or at least one key bit disputed, since the parity of the outputs does not correspond to the number of legitimate inversions. The result of such a contested round will be the removal of at least one edge or at least one vertex from the agreed graph. Thus, if every disruptive action has a nonzero probability of being contested, only a bounded amount of disruption is possible before the disrupters share no keys with anyone in the network, or before they are revealed, and are in either case excluded from the network.
+
+The extension presented next can demonstrate the true value of disputed bits, and hence allows direct incrimination of disrupters.
+
+
+2.6. Tracing by Consent
+Antisocial use of a network can be deterred if the cooperation of most participants makes it possible, albeit expensive, to trace any message. If, for example, a threatening message is sent, a court might order all participants to reveal their shared key bits for a round of the message. The sender of the offending message might try to spread the blame, however, by lying about some odd number of shared bits. Digital signatures can be used to stop such blame-spreading altogether.
+
+In principle, each party sharing a key could insist on a signature, made by the other party sharing, for the value of each shared bit. Such signatures would allow for contested rounds to be fully resolved, for accused senders to exonerate themselves, and even for colluders to convince each other that they are pooling true keys. Unfortunately, cooperating participants able to trace a message to its sender could convince others of the message's origin by revealing the sender's own signatures. A variation can prevent a participant's signatures from being used against him in this way: instead of each member of a pair of participants signing the same shared key bit, each signs a separate bit, such that the sum of the signed bits is the actual shared keybit. Signatures on such "split" key bits would still be useful in resolving contested rounds, since if one contester of a bit shows a signature made by the second contester, then the second would have to reveal the corresponding signature made by the first or be thought to be a disrupter.
+
+In many applications it may be impractical to obtain a separate signature on every key bit or split key bit. The overhead involved could be greatly reduced, however, by digitally signing cryptographic compressions of large numbers of key bits. This might of course require that a whole block of key bits be exposed in showing a signature, but such blocks could be padded with cryptographically generated pseudorandom (or truly random) bits, to allow the exposure of fewer bits per signature. The number of bits and amount of time required to verify a signature for a single bit can be reduced further by using a rooted tree in which each node is the one-way compression function of all its direct descendants; only a digital signature of each participant's root need be agreed on before use of the keys comprising the leaves.
+
+
+3. Relation to Previous Work
+There is another multiparty-secure sender-untraceability protocol in the literature [1]. To facilitate comparison, it will be called a mix-net here, while the protocol of the present work is called a dc-net. The mix-net approach relies on the security of a true public-key system (and possibly also of a conventional cryptosystem), and is thus at best computationally secure; the dc-net approach can use unconditional secrecy channels to provide an unconditionally secure untraceable-sender system, or can use public-key distribution to provide a computationally secure system (as described in Section 2.1).
+
+Under some trust assumptions and channel limitations, however, mix-nets can operate where dc-nets cannot. Suppose that a subset of participants is trusted by every other participant not to collude and that the bandwidth of at least some participants' channels to the trusted subset is incapable of handling the total message traffic. Then mix-nets may operate quite satisfactorily, but dc-nets will be unable to protect fully each participant's untraceability. Mix-nets can also provide recipient untraceability in this communication environment, even though there is insufficient bandwidth for use of the broadcast approach (mentioned in Section 2.4).
+
+If optimal protection against collusion is to be provided and the crypto-security of mix-nets is acceptable, a choice between mix-nets and dc-nets may depend on the nature of the traffic. With a mail-like system that requires only periodic deliveries, and where the average number of messages per interval is relatively large, mix-nets may be suitable. When messages must be delivered continually and there is no time for batching large numbers of them, dc-nets appear preferable.
+
+
+4. Conclusion
+This solution to the dining cryptographers problem demonstrates that unconditional secrecy channels can be used to construct an unconditional sender-untraceability channel. It also shows that a public-key distribution system can be used to construct a computationally secure sender-untraceability channel. The approach appears able to satisfy a wide range of practical concerns.
+
+
+Acknowledgments
+I am pleased to thank Jurjen Bos, Gilles Brassard, Jan-Hendrik Evertse, and the untraceable referees for all their help in revising this article. It is also a pleasure to thank, as in the original version that was distributed at Crypto 84, Whitfield Diffie, Ron Rivest, and Gus Simmons for some stimulating dinner-table conversations.
+
+
+References
+[1] Chaum, D., Untraceable Electronic Mail, Return Addresses, and Digital Pseudonyms, Communications of the ACM, vol. 24, no. 2, February 1981, pp. 84-88.
+[2] Chaum, D., Security Without Identification: Transaction Systems to Make Big Brother Obsolete, Communications of the ACM, vol. 28, no. 10, October 1985, pp. 1030-1044.
+
+[3] Diffie, W., and Hellman, M.E., New Directions in Cryptography, IEEE Transactions on Information Theory, vol. 22, no. 6, November 1976, pp. 644-654.
+
+[4] Merkle, R.C., Secure Communication over Insecure Channels, Communications of the ACM, vol. 21, no. 4, 1978, pp. 294-299.
+
+[5] Tanenbaum, A.S., Computer Networks, Prentice Hall, Englewood Cliffs, New Jersey, 1981.
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Dining Cryptographers and the additivity of polynomial secret sharing
+Written by Ittai Abraham
+Posted on August 25, 2022
+David Chaum’s dining cryptographer problem is a pioneering work on the foundations of privacy. It shows the amazing power of information-theoretic Secure Multi Party Computation. The original paper from 1988 is super accessible and fun to read. Many systems in the last 20 years for anonymity and privacy-preserving communication are based on the Dining Cryptographers problem. Herbivore, Dissent, Riposte, Blinder, and many others.
+
+Here is a modern version of the story:
+
+n
+ cryptographers get together and decide to order dinner online. The delivery person arrives with the food and says that the bill was paid anonymously and promises that: the payer is either one of the cryptographers or the NSA. The cryptographers want to respect the anonymity of the bill payer, if it is one of the cryptographers - but they do want to learn one bit: is the payer the NSA or one of the cryptographers?
+
+Importantly, in case it’s one of the cryptographers, they don’t want to reveal who it is!
+
+Chaum’s protocol uses additive secret sharing which we will cover in later posts. Here we adapt Chaum’s protocol to use polynomial secret sharing of our previous post.
+
+There are n
+ parties (cryptographers) who, while being honest, are naturally curious. Formally, we assume a passive (aka honest-but-curious) adversary controlling f<n
+ parties. Communication is lock-step (synchrony).
+
+Fix a finite field larger than n
+. For a secret α
+, let p(x)
+ denote a polynomial secret sharing of α
+, which has degree at most n−1
+ such that p(0)=α
+ and all the remaining n−1
+ coefficients are chosen uniformly at random.
+
+Let ℓ1,…,ℓn
+ be the Lagrange coefficients such that for any p(1)=v1,…,p(n)=vn
+ of a degree at most n−1
+ polynomial p
+:
+
+p(0)=∑1≤i≤nℓivi(1)
+These interpolation coefficients are fixed for all polynomials of a given degree. To emphasize: the n
+ cryptographers use polynomials of degree at most n−1
+.
+
+The cryptographers run the following two round protocol:
+
+Each party i has an input s_i: either 0 or 1
+Global promise: at most one party has input 1
+
+Party i:
+
+Round 1:
+Randomly choose a_1,…,a_{n-1}
+Let p_i(x)=s_i + sum_{1<=j<n} (a_j x^j)
+For each j, send p_i(j) to party j
+
+Round 2:
+Given shares p_1(i),…,p_n(i)
+Let v_i = p_1(i)+,…,+p_n(i)
+Broadcast v_i to all parties
+
+End of round 2:
+Given shares v_1,…,v_n
+Output (l_1 * v_1)+…+(l_n * v_n)
+Where l_i are the Lagrange coefficients of eqn (1) above
+Conceptually, the protocol is very simple: each cryptographer shares her secret bit using polynomial secret sharing, and then the parties jointly reconstruct the sum of all shares.
+
+Miraculously, in this protocol each party outputs the sum of the bits: 0
+ if the NSA paid and 1
+ if one of the cryptographers paid. Even more remarkably, no subset of cryptographers learns any additional information beyond this single bit!
+
+In particular, any subset of f
+ non-paying cryptographers has no information on which one of the remaining n−f
+ cryptographers is the one that paid.
+
+How do we define this property formally? How do we prove it’s correct?
+
+Not surprisingly, we will use the Validity and Hiding properties of polynomial secret sharing, and use a powerful observation - that polynomial secret sharing is additive.
+
+Proof of Validity - the power of additivity
+We claim that the output of this protocol matches an ideal functionality that takes the inputs s1,…,sn
+ from all parties and outputs their sum s=∑si
+.
+
+This follows from the additive nature of polynomial secret sharing. The one-to-one mapping F(p0,…,pn−1)=p(1),…,p(n)
+ between the n
+ coefficients of a degree n−1
+ polynomial and its n
+ point evaluation is also an isomorphism with regard to addition: F(p⃗ )+F(q⃗ )=F(p0+q0,…,pn−1+qn−1)=p(1)+q(1),…,p(n)+q(n)
+. This follows directly from the additive nature of polynomials over a field.
+
+Proof of Hiding - the adversary learns nothing other than the output of the ideal functionality
+The adversary inevitably learns s=s1+⋯+sn
+. The non-trivial case arises when f≤n−2
+ because for f=n−1
+, once s
+ is revealed, the adversary knows exactly who payed (even in the ideal world).
+
+For any f≤n−2
+ we would like to say that the adversary controlling any subset F⊂N={1,…,n}
+ with |F|=f
+ learns nothing other than the sum s
+. Formally, for any {si}i∈N∖F
+, other than the value of the sum s
+, the distribution of the view of the adversary is uniformly random.
+
+For the first round, this follows directly from the Hiding property for any f<n
+ parties of each of the polynomial secret sharing.
+
+For the second round, the adversary learns v1,…,vn
+, which corresponds to the polynomial p=p1+⋯+pn
+. We again use the isomorphism of addition: for any choice of {pi}i∈F
+ for an adversary controlling the parties in F
+, while the first coefficient of p
+ is s
+, the remaining n−1
+ coefficients of p
+ are uniformly random. This follows because adding a uniformly random value to any known value results in a uniformly random value. Thus, round 2 is equivalent to a secret sharing of s
+ through a uniformly random polynomial p
+ generated by an honest dealer.
+
+What else can we do with the additivity of polynomial secret sharing?
+Unpredictable randomness
+A central application of polynomial secret sharing additivity is the generation of unpredictable randomness. By adding f+1
+ secret sharings of uniformly random secrets, we can guarantee that the adversary cannot predict the sum!
+
+This idea is a key ingredient to many Distributed Key Generation protocols, efficient Randomized Consensus protocols, and the core of Secure Multi Party Computation.
+
+Degree reduction for MPC
+As we will explore in later posts, additivity and the linearity of interpolation are crucial enablers for building interactive MPC multiplication protocols from addition protocols - once addition and multiplication are both possible, the sky is the limit.
+
+While addition is possible, multiplication has the annoying property that the degree of the secret increases. The solution is to run a degree reduction protocol after each multiplication gate. The degree reduction is simply a protocol that uses the additively of polynomials to compute a linear combination using the Lagrange coefficients. So given a secret shared polynomial of degree 2f
+, each party can share its share as a polynomial of degree f
+ and the linear combination (using the degree 2f
+ Lagrange coefficients) produces a degree f
+ polynomial that shares the same secret as the original degree 2f
+ one!
+
+Notes
+There are many possible improvements to this basic scheme. Can we handle malicious cryptographers? Can we handle asynchrony in communication? What about denial of service? Can we scale to thousands or even millions of cryptographers? Can cryptographic protocols (signatures, zero knowledge proofs, etc) improve the performance and complexity? Many of the papers mentioned above have made significant advances on these challenges. We will cover some of this in future posts.
+
+Acknowledgements
+Many thanks to Thor Kamphefner for insightful comments and suggestions.
+
+Your thoughts on Twitter
+
+Tags: cryptography
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+Living with asynchrony and eventually reaching agreement by combining binding and randomness
+Written by Ittai Abraham, Gilad Stern
+Posted on December 10, 2024
+The prevailing view on fault-tolerant agreement is that it is impossible in asynchrony for deterministic protocols, but adding randomization solves the problem. This statement is confusing in two aspects:
+
+The FLP result says that any protocol, even a randomized protocol, must have a non-terminating execution where every configuration is bivalent (or uncommitted or is a pivot configuration). The difference is that in a randomized protocol, the probability of non-terminating executions may be small. Non-termination may even be a zero-probability event, meaning the protocol terminates almost surely (almost surely termination).
+It’s not clear why using randomness helps without binding; what is needed is a delicate interplay between semantically binding the adversary and then causing them to fail with probability ≥α
+ using unpredictable randomness. Here, binding means forcing the adversary into a restricted choice that can no longer depend on future randomness. Here failure means that the protocol reaches a univalent configuration where the decision value is fixed.
+The focus of this post is on this second point: the subtle interplay of both binding and randomization to achieve termination in finite expected number of rounds.
+
+We present a framework that is common to all asynchronous agreement protocols that we are aware of (for both crash failures and Byzantine failures) and works even with a strongly adaptive adversary. We first discuss some concrete examples.
+
+Examples of solving agreement in asynchrony using binding before revealing the randomness:
+In binary agreement protocols (see this series 1, 2, 3, 4, 5) the binding protocol forces the execution into a state equivalent to the adversary having chosen B∈0,1
+. The protocol reaches a univalent state (decision) if the common coin r
+ equals B
+. It is critical that the choice of the bound value B
+ is done before knowing the coin value.
+In multi-value Byzantine agreement protocols that use a randomness beacon (like VABA), the binding protocol often forces the adversary to choose B
+ as a set of n−f
+ parties (or f+1
+ honest parties) that completed some step. The protocol reaches a univalent state if the randomness beacon outputs a leader that is in this set. Again, it is critical that the choice of the set B
+ is done before knowing the output of the randomness beacon. See our post on multi-world VABA for more details.
+In multi-value Byzantine agreement protocols (like NWH) that build randomness from verifiable secret sharing (VSS), the binding protocol often forces the adversary to choose a core set B
+ as a set of n−f
+ parties (or f+1
+ honest parties). This is often done via a binding gather protocol. The binding and hiding properties of the VSS are used to commit to all the required randomness to guarantee the α
+-correctness and unpredictability properties. The protocol reaches a univalent state if the randomness of the VSS causes all non-faulty parties to choose the same leader (or proposal) that is a member of this core set B
+. Here too, it is critical that the choice of the core set B
+ is done before seeing the output of the relevant VSS values.
+The abstract framework: combination of Binding and Randomization
+The high-level idea is simple: first force the adversary to bind to some choice, then reveal a random value that will cause the adversary to fail with some probability. We will make this formal in this section.
+
+We use two protocols: a binding protocol and a common randomness protocol. For the binding protocol, assume a set 
+ of possible binding values.
+
+Our goal is to reach a configuration where the decision value is fixed (a univalent or committed configuration).
+
+The first protocol is the binding protocol, with the following properties:
+
+Liveness: if all non-faulty start the binding protocol, then all non-faulty will complete it.
+Binding: at the time the first non-faulty completes the protocol, the adversary must fix some choice B∈
+. This choice is a function of the view of all the non-faulty parties at that time. The effect of this choice is defined below.
+The second protocol is the common randomness protocol, it has the following properties:
+
+Liveness: if all non-faulty start the common randomness protocol, then all non-faulty will complete it and output some value.
+Univalency: For any choice B∈
+, there exists some event GB
+ determined by the execution of the common randomness protocol up to the time the first non-faulty completes it that causes the execution to be univalent (reach a committed configuration where the decision value is fixed).
+α
+-Correctness: There exists some α
+ such that for any B∈
+, the probability of GB
+ given B
+ is at least α
+. i.e. ∃α,∀B∈,Pr[GB∣B]≥α
+.
+Unpredictability: For any choice B∈
+ and any (poly-time) adversary that is using its view before the first non-faulty completes the common randomness protocol, the probability of guessing if GB
+ will occur given B
+ is at most α
+ (or negligibly better).
+Conclusion
+Asynchronous agreement protocols rely on randomness not as a standalone tool, but as a way to probabilistically defeat an already constrained adversary. The binding phase restricts the adversary to a fixed choice or structure, while the randomness phase ensures that, with constant probability, this choice becomes incompatible with continued bivalence. Viewing existing protocols through this lens clarifies why randomness alone is insufficient, why binding must precede revelation, and why many seemingly different constructions share the same termination mechanism. This perspective is not a new protocol, but a unifying abstraction that explains how agreement is eventually forced even in fully asynchronous settings.
+
+Notes
+The correctness property defines the expected run time. Assuming the number of rounds for the binding protocol and the common randomness protocol is both constant, then the expected number of rounds till reaching agreement is O(1/α)
+. This is because reaching a univalent configuration is essentially a Bernoulli random variable with parameter α
+.
+The binding property implies the existence of an extractor that can extract the bound value at the time the first non-faulty completes the binding protocol.
+The unpredictability property is often proven by proving a stronger property, like the unpredictability of the common coin, or of the random beacon value, or the unpredictability of the random rank of some parties (in particular those in the core).
+Your thoughts on X.
+
+Tags: randomness asynchrony
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Living with Asynchrony: Bracha's Reliable Broadcast
+Written by Ittai Abraham and Kartik Nayak
+Posted on September 19, 2020
+In this series of posts, we explore what can be done in the Asynchronous model. This model seems challenging because the adversary can delay messages by any bounded time. By the end of this series, you will see that almost everything that can be done in synchrony can be obtained in asynchrony. The next posts in this series are about gather, round complexity, and finally our series on Asynchronous Agreement.
+
+We begin with Bracha’s Reliable Broadcast from 1987 (conference version from 1984). This is one of the most important build blocks for Byzantine Fault Tolerant protocols in the Asynchronous model. There are n
+ parties, where one of them is designated as the leader. The malicious threshold adversary can corrupt at most f<n/3
+ parties. The leader has some input value v
+ and a party that terminates needs to output a value.
+
+Reliable Broadcast Properties
+(validity): If the leader is non-faulty then eventually all non-faulty parties will output the leader’s input.
+
+(totality): If some non-faulty party outputs a value then eventually all non-faulty parties will output a value.
+
+(agreement): All non-faulty parties that output a value, output the same value.
+
+Since this protocol is supposed to work in the asynchronous model, these properties use the term eventually. This term is often used in asynchrony to indicate that no matter what the adversary does and for how long it delays messages, some event will occur after a bounded number of message processing at each party (assuming a bounded threshold adversary).
+
+Reliable Broadcast
+The high level idea:
+
+First, we force the leader to send just one value: we do this by requiring each party to echo just one message and wait for n−f
+ echo messages before voting for it. Since any two sets of n−f
+ must intersect by at least f+1
+ parties, it cannot be that two different non-faulty parties echo different values.
+
+Second, we make sure that if a non-faulty delivers a value, then all non-faulty will. We do this by requiring a party to send just one vote after seeing either n−f
+ echo messages or after seeing f+1
+ votes. So if any party sees n−f
+ votes then all non-faulty will see n−2f≥f+1
+ votes.
+
+The pseudo-code is simple:
+
+   // leader with input v
+   send <v> to all parties
+
+   // Party j (including the leader)
+   echo = true
+   
+   on receiving <v> from leader:
+      if echo == true:
+         send <echo, v> to all parties
+         echo = false
+
+   on receiving <echo, v> from n-f distinct parties:
+         send <vote, v> to all parties
+
+   on receiving <vote, v> from f+1 distinct parties:
+         send <vote, v> to all parties
+
+   on receiving <vote, v> from n-f distinct parties:
+       deliver v
+Analysis
+Claim 1 (validity): If the leader is honest and sends to all parties then all non-faulty will eventually deliver .
+
+Proof: All non-faulty will eventually send <echo,v>, so eventually all non-faulty will receive n−f
+ echoes for v
+ and at most f
+ echoes for other values. Hence all non-faulty will eventually send <vote, v>, so eventually all non-faulty will receive n−f
+ votes for v
+ and at most f
+ votes for other values.
+
+Claim 2:: No two non-faulty will send conflicting votes.
+
+Proof: Seeking a contradiction, consider the first vote for v
+ and the first vote for v′≠v
+ by two non-faulty parties a
+ and b
+. Since these are the first, party a
+ must have seen a set A
+ of n−f
+ echoes for v
+ and party b
+ must have seen a set B
+ of n−f
+ echoes for v′≠v
+ (since they are the first, they could not have voted due to seeing f+1
+ votes). Observe that since |A|=|B|=n−f
+, then |A∩B|≥f+1
+ (this is the famous “quorum intersection” property). This implies that there must be at least f+1
+ parties that sent an echo to both of them, which implies that at least one non-faulty party sent two echoes for different values, which contradicts the code.
+
+Claim 3 (agreement and totality): If a non-faulty delivers v
+, then all non-faulty will eventually deliver v
+.
+
+Proof: From the previous claim, we know that all non-faulty that vote, will vote for the same value. So if a non-faulty delivers, it has seen n−f
+ distinct votes, of which at least n−2f≥f+1
+ came from non-faulty parties. So all non-faulty parties will either vote v
+ due to seeing n−f
+ echoes or eventually due to seeing the votes from these f+1
+ non-faulty parties. Note that a non-faulty will never vote for v′≠v
+ because from claim 2, there will not be n−f
+ echoes for v′
+, and there will not be f+1
+ votes for v′
+.
+
+Notes
+The protocol only needs authenticated channels (no other cryptography).
+
+Even in partial synchrony, the resilience threshold of 3f+1
+ optimal due to the DLS split brain lower bounds.
+
+Bracha used Reliable Broadcast to improve Ben-Or’s Asynchonrus Byzantine Agreement from n>5f
+ to the optimal resilience of n>3f
+.
+
+Reliable broadcast requires sending O(n2)
+ messages that contain the value v
+. If v
+ has ℓ
+ bits this is a total of O(ℓn2)
+ bits. The post about Verifiable Information dispersal shows how this can be improved to O(ℓn+n2)
+ bits.
+
+Christian Cachin has excellent course notes on Byzantine Broadcasts and Randomized Consensus including Bracha’s Reliable broadcast.
+
+Scratch your Brains!
+Prove correctness (or provide a counterexample) of the following optimization that simplifies Bracha’s original protocol and saves a round!
+
+    on receiving <v> from leader:
+      if echo == true:
+         send <echo, v> to all parties
+         echo = false
+
+    on receiving <echo, v> from f+1 distinct parties:
+       if echo == true:
+         send <echo, v> to all parties
+         echo = false
+
+    on receiving <echo, v> from n-f distinct parties:
+       deliver v
+Acknowledgment. We would like to thank hemengjie for fixing an error in the exercise.
+
+Please answer/discuss/comment/ask on Twitter.
+
+Tags: asynchrony
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Scalable Agreement - Near Linear Communication and Constant Expected Time
+Written by Ittai Abraham
+Posted on December 12, 2025
+Agreement needs quadratic communication and linear time in the worst case. Scalable Agreement aims for near linear communication and constant time in expectation. In this post, we show scalable agreement against a weak adaptive adversary that can cause omission failures. This will be the basis for the Byzantine case that we will explore in future posts.
+
+This post can be seen as followup to the posts that solve binary consensus for crash failures and for omission failures in constant expected time. Rhose protocols had quadratic message complexity.
+
+What is the best we can hope for?
+Three lower bounds and barriers stand in our way:
+
+In the worst case reaching agreement takes at least f+1
+ rounds.
+We will use randomization to reduce the expected number of rounds to constant.
+In the worst case reaching agreement with no error requires Ω(n2)
+ communication.
+Assuming a weak adaptive adversary we will reduce the expected communication to O(nlogγn)
+ (for some fixed constant γ
+) and in doing so incur a non-zero probability of error (denoted δ
+).
+We know that the best resilience one can hope for is f<n/2
+. It is not known how to obtain this tight bound with o(n2)
+ expected communication (see Ramboud, Theorem 5).
+So we assume some ϵ>0
+ and obtain near-optimal resilience f<n/(2+ϵ)
+.
+Given this the best we can hope for:
+
+Theorem: there exists a synchronous binary agreement protocol with δ
+ error that is resilient to a weak adaptive adversary that can cause omission failures to f<n/(2+ϵ)
+ parties. The expected number of rounds to terminate is constant and the expected communication complexity is O(nlogγn)
+.
+
+Specifically, we obtain super-polynomially small error δ=n−O(logn)
+, sub linear near optimal resilience ϵ=1/logn
+, and near linear message complexity with γ=7
+.
+
+This post aims for simplicity and does not optimize the parameter γ
+ or explore the full space of options for ϵ
+ and δ
+.
+
+Main Idea: subsample committees that only speaks once
+Instead of having all parties speak in each round, only a poly-logarithmic number of parties will speak in each round: This reduces the communication from O(n2)
+ to O(nlogO(1)n)
+. In this post, the committee members will run a variant of this constant expected time protocol, but this idea can be generalized to many other protocols.
+
+In each round, each party will choose a random rank in [1..n]
+ and only parties with rank at most k=log6n
+ will send messages in that round. These elected parties will speak just once. The weak adaptive adversary cannot predict who will speak in round j
+ before round j
+ starts, and corrupting them after seeing their messages is too late. This paradigm is called You Only Speak Once (YOSO) and was first introduced in the context of Blockchains by Algorand and in the context of MPC by Gentry et al.
+
+Using measure concentration to prove that committees are small and contains many non-faulty parties
+Fix a round j
+. Each party independently chooses a fresh random rank in [1..n]
+. Define
+
+k=log6n,ℓ=k−log4n,h=k+log4n.(1)
+Let C=Cj
+ be the random set of parties whose rank is at most k
+ in round j
+ and F
+ be the set of parties that are faulty before round j
+. The adversary can corrupt at most f<n/(2+ϵ)
+ parties with ϵ=1/logn
+.
+
+Lemma 1 (committee size concentration):
+
+Fix δ1=2e−log2n/3=n−O(logn)
+. With probability at least 1−δ1
+,
+|C|∈[ℓ,h].(2)
+From Lemma 1, with probability 1−δ1
+ the committee size in round j
+ is in [ℓ,h]
+. We next show that, conditioned on this event, the committee contains many parties that are not faulty before round j
+.
+
+Define
+
+q=h−ℓ/2.(3)
+Lemma 2 (many non-faulty in the committee):
+
+Condition on the event that |C|∈[ℓ,h]
+. Then, with probability at least 1−δ2
+,
+|C∖F|≥q,(4)
+where δ2=exp(−Ω(log4n))
+.
+
+This means that in any round j
+, any party can wait for q
+ round j
+ messages.
+
+Moreover, since q>|C|/2
+ then any two sets of at least q
+ round j
+ messages must intersect. The proofs for both lemmas appear at the end of the post.
+
+Let δ=δ1+δ2
+, and note that δ=n−O(logn)
+. From now on, we will condition on the good event that both lemmas hold for all rounds of the protocol. Since we will apply this a polynomially bounded number of times, the overall error remains δ=n−O(logn)
+.
+
+Weak adaptive adversaries
+As in the previous post, we need to make sure that the randomness is unpredictable and that the adversary can only adapt to the randomness when it’s too late for it to matter.
+
+Recall the weak adaptive adversary in the lock-step model: If the adversary decides to corrupt a party after seeing the content of its round j
+ message then it can only corrupt it after the party sends all its round j
+ messages to all parties.
+
+A Near Linear Weak Common Coin against a weak adaptive adversary
+A near linear weak common coin for round j
+ has the following properties against any weak adaptive minority omission failures:
+
+Unpredictable: The coin value for round j
+ cannot be predicted before seeing the round j
+ messages.
+
+α
+-correct: for any b∈0,1
+, with probability at least α
+, all parties output b
+. In particular, here we will aim for α=1/5
+. Note that a totally fair coin is α=1/2
+.
+
+Near linear: the message complexity is nlogO(1)n
+.
+
+δ
+ error liveness: all non-faulty parties output a coin value with probability 1−δ
+.
+
+The main idea is simple, every party chooses a random rank and a random bit. Only parties with rank at most k
+ send their rank and bit. Parties output the bit from the lowest rank they hear:
+
+Each party randomly chooses:
+    a rank in [1,...,n]
+    a bit in [0,1]
+    if rank <= k then
+        send (rank,bit) to all parties
+
+Each party that hears q (rank,bit) values:
+    outputs the bit associated with the lowest rank it heard
+    (break ties arbitrarily)
+Proof for the weak coin
+Unpredictability holds because the randomness is chosen in round j
+. The weak adaptive adversary can either choose to act before seeing a party’s messages - in which case the value is unpredictable, or after seeing its message - in which case its too late.
+
+For 1/5
+-correctness: let Cj
+ be the set of parties with rank at most k
+ in round j
+. The minimum is unique except with probability at most O(k2/n)
+, since a tie for the minimum implies that at least two parties picked the same rank in [1..n]
+, and there are at most k
+ ranks that could be the minimum.
+
+Let E
+ be the event that Cj∈[ℓ,h]
+, the minimum rank in Cj
+ is unique, and p
+ is not corrupted before round j
+. Since the adversary corrupts fewer than n/(2+ϵ)
+ parties overall, we have Pr[p is non-faulty before round j]≥1−1/(2+ϵ)>1/2
+. For sufficiently large n
+, the other two conditions fail with negligible probability, hence Pr[E]>2/5
+.
+
+On event E
+, party p
+ sends (rank,bit)
+ in round j
+, and since messages between non-faulty parties are delivered reliably, every non-faulty party receives this message. Because p
+ has the minimum rank, every non-faulty party outputs p
+’s bit. Therefore, for each b∈0,1
+, with probability at least Pr[E]/2≥1/5
+, all non-faulty parties output b
+.
+
+For near linear: by Lemma 1, in round j
+ only |Cj|=O(log6n)
+ parties send, so the total number of messages in the coin round is O(nlog6n)
+.
+
+For δ
+ error liveness: conditioned on Lemma 1 and 2, Cj
+ will contain at least q
+ non-faulty members.
+
+Near Linear Binary agreement from a Near Linear Weak Common Coin
+Each party has an input 0 or 1, and the goal is to output a common value (agreement) that is an input value (validity).
+
+We use the same sampling rule in every round: in round r
+, parties with rank at most k=log6n
+ send. Let Cr
+ be the set of parties that speak in round r
+.
+
+Fix any round r
+ from Lemma 1 and 2 there are at least q
+ non-faulty parties in Cr
+. So every non-faulty party receives at least q
+ round r
+ messages.
+
+The protocol runs in phases. Each phase consists of 3 rounds.
+
+value := input
+
+Round 3j-2:
+    Choose a rank in [1,...,n]
+    If rank <= k then
+       send <value> to all parties
+    If fewer than q messages are received then
+       shut down
+    If all received values are b then
+       value := b
+    Otherwise
+       value := ⊥
+
+Round 3j-1:
+    Choose a rank in [1,...,n]
+    If rank <= k then
+        send <value> to all parties
+    If fewer than q messages are received then
+       shut down
+    If some received value is b and not ⊥ then
+       value := b
+    If all received values are b and not ⊥ then
+       output b
+
+Round 3j:
+    Choose a rank in [1,...,n]
+    Choose a bit in [0,1]
+    If rank <= k then
+        send <rank, bit> to all parties
+    If fewer than q messages are received then
+       shut down
+    Let bit be from the lowest rank
+    If value = ⊥ then
+       value := bit
+Protocol in words: in the first round, a random subset of parties sends their values and all parties either keep their value or switch to ⊥
+ if they hear a conflict. In the second round, a random subset of parties sends their values again. This time parties stay with ⊥
+ only if they don’t hear value, and they output a bit if all received values are identical and not ⊥
+. Finally, in the third round, parties that end with ⊥
+ use the weak coin protocol to obtain a new value.
+
+Proof for the Agreement protocol
+Validity: assume all parties start with input b
+. In round 1
+, every non-faulty party receives at least q
+ messages, and all values received are b
+, so every non-faulty party sets its value to b
+. In round 2
+, again every non-faulty party receives at least q
+ messages, all equal to b
+, so every non-faulty party outputs b
+.
+
+No split values after round 3j−2
+: fix a phase j
+. Suppose some non-faulty party ends round 3j−2
+ with value b∈0,1
+ (not ⊥
+). Then it received at least q
+ messages in round 3j−2
+, all equal to b
+. Any other non-faulty party that reaches the end of round 3j−2
+ also received at least q
+ messages in that round. Since q>|C3j−2|/2
+, the two size-q
+ sender sets intersect in at least one sender from C3j−2∖F
+, and that sender sent value b
+ to all parties. Therefore the second party received at least one message with value b
+ and cannot end round 3j−2
+ with value 1−b
+.
+
+We conclude that there exists a bit b∈0,1
+ such that every party that starts the coin round 3j
+ has a value in b,⊥
+.
+
+Agreement: let j⋆
+ be the first phase in which some non-faulty party outputs a value at the end of round 3j⋆−1
+, and let this value be b
+. The deciding party received at least q
+ messages in round 3j⋆−1
+, all equal to b
+. Any other non-faulty party that reaches the end of round 3j⋆−1
+ also received at least q
+ messages in that round, and since q>|C3j⋆−1|/2
+ their sender sets intersect in at least one sender from C3j⋆−1∖F
+, so it received at least one message with value b
+. Hence any party that enters the next phase has value b
+. So an argument similar to the validity above implies that all non-faulty parties output b
+ by the end of round 3(j⋆+1)−1
+.
+
+Expected Termination: fix a phase j
+. If no party outputs a value by the end of round 3j−1
+, then by the previous claim there exists a bit b
+ such that every non-faulty party starts the coin round 3j
+ with value in b,⊥
+. In the coin round, the weak coin is α
+-correct with α≥1/5
+, so for this particular bit b
+ we have that with probability at least 1/5
+ all non-faulty parties output coin value b
+. Parties with value ⊥
+ adopt the coin bit, so at the end of round 3j
+ all non-faulty parties have value b
+. In the next phase, an argument similar to the validity above implies that all non-faulty parties output b
+ by the end of round 3(j+1)−1
+. Therefore, each phase leads to a decision with constant probability, so the expected number of phases, and hence rounds, to decide is constant.
+
+Message complexity: in each round r
+, only the committee Cr
+ sends messages, and each sender broadcasts to all n
+ parties, so the number of messages in round r
+ is n⋅|Cr|
+. Lemma 1 gives |Cr|∈[ℓ,h]=Θ(log6n)
+, hence the message complexity per round is Θ(nlog6n)
+. In the agreement rounds, each message carries a constant size value, so the bit complexity per agreement round is Θ(nlog6n)
+. In the coin round, each sender also includes a rank in [1..n]
+, which costs Θ(logn)
+ bits, so the bit complexity of the coin round is Θ(nlog6nlogn)
+. Over a constant expected number of phases, the expected total communication is O(nlogγn)
+ for γ=7
+.
+
+Proofs for measure concentration lemmas
+Proof of Lemma 1:
+
+Let K
+ be the random variable that counts the number of parties that have rank at most k
+. Then K
+ is binomial with Pr[rank≤k]=k/n
+, and from linearity of expectation, E[K]=μ=log6n
+.
+
+For simplicity, we apply measure concentration via a generic two sided Chernoff bound. For 0<β<1
+:
+
+Pr[‖K−μ‖≥βμ]≤2e−μβ2/3(5)
+Taking μ=log6n
+ and β=log−2n
+ we get βμ=log4n
+ and μβ2=log2n
+, hence:
+
+Pr[‖K−μ‖≥log4n]≤2e−log2n/3=n−O(logn)(6)
+This concludes the proof with δ1=2e−log2n/3=n−O(logn)
+. Here log
+ is the natural logarithm, changing the base only affects constants.
+
+We will apply this lemma a polynomially bounded number of times, so even when we union bound over all applications we get an error of δ=n−O(logn)
+.
+
+Proof of Lemma 2:
+
+Condition on |C|=m∈[ℓ,h]
+ and on the set F
+ of parties corrupted before round j
+. Since ranks in round j
+ are fresh and independent, C
+ is a uniform size-m
+ subset of [n]
+.
+
+Let X=|C∩F|
+ be the number of faulty parties in C
+. Since C
+ is sampled uniformly without replacement, X
+ is hypergeometric with μ=E[X∣m]=m⋅|F|n≤m2+ϵ
+.
+
+We must show X≤m−q
+. The worst case is m=ℓ
+, in which case m−q=3ℓ/2−h=k2−52log4n=:T
+.
+
+With ϵ=1/logn
+, μ≤ℓ2+ϵ=k2−Θ(log5n)
+. Thus, T=(1+α)μ
+ for some α=Θ(1/logn)
+. Using an upper-tail Chernoff bound, Pr[X≥T]≤exp(−Ω(μα2))=exp(−Ω(log4n))
+.
+
+Therefore, conditioned on |C|∈[ℓ,h]
+, with probability at least 1−δ2
+, we have X≤m−q
+, equivalently |C∖F|≥q
+.
+
+Notes
+The protocol can be adapted to multi-valued agreement using a weak leader election instead of a weak common coin.
+We will explore how to extend this protocol to Byzantine agreement in a future post.
+Its a good exercise to verify that the protocol can obtain uniform agreement.
+Its also a good exercise to add an explicit termination detection mechanism so that parties can know when to stop sending messages.
+Your thoughts on X.
+
+Tags: randomness
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Scalable Agreement - Near Linear Communication and Constant Expected Time
+Written by Ittai Abraham
+Posted on December 12, 2025
+Agreement needs quadratic communication and linear time in the worst case. Scalable Agreement aims for near linear communication and constant time in expectation. In this post, we show scalable agreement against a weak adaptive adversary that can cause omission failures. This will be the basis for the Byzantine case that we will explore in future posts.
+
+This post can be seen as followup to the posts that solve binary consensus for crash failures and for omission failures in constant expected time. Rhose protocols had quadratic message complexity.
+
+What is the best we can hope for?
+Three lower bounds and barriers stand in our way:
+
+In the worst case reaching agreement takes at least f+1
+ rounds.
+We will use randomization to reduce the expected number of rounds to constant.
+In the worst case reaching agreement with no error requires Ω(n2)
+ communication.
+Assuming a weak adaptive adversary we will reduce the expected communication to O(nlogγn)
+ (for some fixed constant γ
+) and in doing so incur a non-zero probability of error (denoted δ
+).
+We know that the best resilience one can hope for is f<n/2
+. It is not known how to obtain this tight bound with o(n2)
+ expected communication (see Ramboud, Theorem 5).
+So we assume some ϵ>0
+ and obtain near-optimal resilience f<n/(2+ϵ)
+.
+Given this the best we can hope for:
+
+Theorem: there exists a synchronous binary agreement protocol with δ
+ error that is resilient to a weak adaptive adversary that can cause omission failures to f<n/(2+ϵ)
+ parties. The expected number of rounds to terminate is constant and the expected communication complexity is O(nlogγn)
+.
+
+Specifically, we obtain super-polynomially small error δ=n−O(logn)
+, sub linear near optimal resilience ϵ=1/logn
+, and near linear message complexity with γ=7
+.
+
+This post aims for simplicity and does not optimize the parameter γ
+ or explore the full space of options for ϵ
+ and δ
+.
+
+Main Idea: subsample committees that only speaks once
+Instead of having all parties speak in each round, only a poly-logarithmic number of parties will speak in each round: This reduces the communication from O(n2)
+ to O(nlogO(1)n)
+. In this post, the committee members will run a variant of this constant expected time protocol, but this idea can be generalized to many other protocols.
+
+In each round, each party will choose a random rank in [1..n]
+ and only parties with rank at most k=log6n
+ will send messages in that round. These elected parties will speak just once. The weak adaptive adversary cannot predict who will speak in round j
+ before round j
+ starts, and corrupting them after seeing their messages is too late. This paradigm is called You Only Speak Once (YOSO) and was first introduced in the context of Blockchains by Algorand and in the context of MPC by Gentry et al.
+
+Using measure concentration to prove that committees are small and contains many non-faulty parties
+Fix a round j
+. Each party independently chooses a fresh random rank in [1..n]
+. Define
+
+k=log6n,ℓ=k−log4n,h=k+log4n.(1)
+Let C=Cj
+ be the random set of parties whose rank is at most k
+ in round j
+ and F
+ be the set of parties that are faulty before round j
+. The adversary can corrupt at most f<n/(2+ϵ)
+ parties with ϵ=1/logn
+.
+
+Lemma 1 (committee size concentration):
+
+Fix δ1=2e−log2n/3=n−O(logn)
+. With probability at least 1−δ1
+,
+|C|∈[ℓ,h].(2)
+From Lemma 1, with probability 1−δ1
+ the committee size in round j
+ is in [ℓ,h]
+. We next show that, conditioned on this event, the committee contains many parties that are not faulty before round j
+.
+
+Define
+
+q=h−ℓ/2.(3)
+Lemma 2 (many non-faulty in the committee):
+
+Condition on the event that |C|∈[ℓ,h]
+. Then, with probability at least 1−δ2
+,
+|C∖F|≥q,(4)
+where δ2=exp(−Ω(log4n))
+.
+
+This means that in any round j
+, any party can wait for q
+ round j
+ messages.
+
+Moreover, since q>|C|/2
+ then any two sets of at least q
+ round j
+ messages must intersect. The proofs for both lemmas appear at the end of the post.
+
+Let δ=δ1+δ2
+, and note that δ=n−O(logn)
+. From now on, we will condition on the good event that both lemmas hold for all rounds of the protocol. Since we will apply this a polynomially bounded number of times, the overall error remains δ=n−O(logn)
+.
+
+Weak adaptive adversaries
+As in the previous post, we need to make sure that the randomness is unpredictable and that the adversary can only adapt to the randomness when it’s too late for it to matter.
+
+Recall the weak adaptive adversary in the lock-step model: If the adversary decides to corrupt a party after seeing the content of its round j
+ message then it can only corrupt it after the party sends all its round j
+ messages to all parties.
+
+A Near Linear Weak Common Coin against a weak adaptive adversary
+A near linear weak common coin for round j
+ has the following properties against any weak adaptive minority omission failures:
+
+Unpredictable: The coin value for round j
+ cannot be predicted before seeing the round j
+ messages.
+
+α
+-correct: for any b∈0,1
+, with probability at least α
+, all parties output b
+. In particular, here we will aim for α=1/5
+. Note that a totally fair coin is α=1/2
+.
+
+Near linear: the message complexity is nlogO(1)n
+.
+
+δ
+ error liveness: all non-faulty parties output a coin value with probability 1−δ
+.
+
+The main idea is simple, every party chooses a random rank and a random bit. Only parties with rank at most k
+ send their rank and bit. Parties output the bit from the lowest rank they hear:
+
+Each party randomly chooses:
+    a rank in [1,...,n]
+    a bit in [0,1]
+    if rank <= k then
+        send (rank,bit) to all parties
+
+Each party that hears q (rank,bit) values:
+    outputs the bit associated with the lowest rank it heard
+    (break ties arbitrarily)
+Proof for the weak coin
+Unpredictability holds because the randomness is chosen in round j
+. The weak adaptive adversary can either choose to act before seeing a party’s messages - in which case the value is unpredictable, or after seeing its message - in which case its too late.
+
+For 1/5
+-correctness: let Cj
+ be the set of parties with rank at most k
+ in round j
+. The minimum is unique except with probability at most O(k2/n)
+, since a tie for the minimum implies that at least two parties picked the same rank in [1..n]
+, and there are at most k
+ ranks that could be the minimum.
+
+Let E
+ be the event that Cj∈[ℓ,h]
+, the minimum rank in Cj
+ is unique, and p
+ is not corrupted before round j
+. Since the adversary corrupts fewer than n/(2+ϵ)
+ parties overall, we have Pr[p is non-faulty before round j]≥1−1/(2+ϵ)>1/2
+. For sufficiently large n
+, the other two conditions fail with negligible probability, hence Pr[E]>2/5
+.
+
+On event E
+, party p
+ sends (rank,bit)
+ in round j
+, and since messages between non-faulty parties are delivered reliably, every non-faulty party receives this message. Because p
+ has the minimum rank, every non-faulty party outputs p
+’s bit. Therefore, for each b∈0,1
+, with probability at least Pr[E]/2≥1/5
+, all non-faulty parties output b
+.
+
+For near linear: by Lemma 1, in round j
+ only |Cj|=O(log6n)
+ parties send, so the total number of messages in the coin round is O(nlog6n)
+.
+
+For δ
+ error liveness: conditioned on Lemma 1 and 2, Cj
+ will contain at least q
+ non-faulty members.
+
+Near Linear Binary agreement from a Near Linear Weak Common Coin
+Each party has an input 0 or 1, and the goal is to output a common value (agreement) that is an input value (validity).
+
+We use the same sampling rule in every round: in round r
+, parties with rank at most k=log6n
+ send. Let Cr
+ be the set of parties that speak in round r
+.
+
+Fix any round r
+ from Lemma 1 and 2 there are at least q
+ non-faulty parties in Cr
+. So every non-faulty party receives at least q
+ round r
+ messages.
+
+The protocol runs in phases. Each phase consists of 3 rounds.
+
+value := input
+
+Round 3j-2:
+    Choose a rank in [1,...,n]
+    If rank <= k then
+       send <value> to all parties
+    If fewer than q messages are received then
+       shut down
+    If all received values are b then
+       value := b
+    Otherwise
+       value := ⊥
+
+Round 3j-1:
+    Choose a rank in [1,...,n]
+    If rank <= k then
+        send <value> to all parties
+    If fewer than q messages are received then
+       shut down
+    If some received value is b and not ⊥ then
+       value := b
+    If all received values are b and not ⊥ then
+       output b
+
+Round 3j:
+    Choose a rank in [1,...,n]
+    Choose a bit in [0,1]
+    If rank <= k then
+        send <rank, bit> to all parties
+    If fewer than q messages are received then
+       shut down
+    Let bit be from the lowest rank
+    If value = ⊥ then
+       value := bit
+Protocol in words: in the first round, a random subset of parties sends their values and all parties either keep their value or switch to ⊥
+ if they hear a conflict. In the second round, a random subset of parties sends their values again. This time parties stay with ⊥
+ only if they don’t hear value, and they output a bit if all received values are identical and not ⊥
+. Finally, in the third round, parties that end with ⊥
+ use the weak coin protocol to obtain a new value.
+
+Proof for the Agreement protocol
+Validity: assume all parties start with input b
+. In round 1
+, every non-faulty party receives at least q
+ messages, and all values received are b
+, so every non-faulty party sets its value to b
+. In round 2
+, again every non-faulty party receives at least q
+ messages, all equal to b
+, so every non-faulty party outputs b
+.
+
+No split values after round 3j−2
+: fix a phase j
+. Suppose some non-faulty party ends round 3j−2
+ with value b∈0,1
+ (not ⊥
+). Then it received at least q
+ messages in round 3j−2
+, all equal to b
+. Any other non-faulty party that reaches the end of round 3j−2
+ also received at least q
+ messages in that round. Since q>|C3j−2|/2
+, the two size-q
+ sender sets intersect in at least one sender from C3j−2∖F
+, and that sender sent value b
+ to all parties. Therefore the second party received at least one message with value b
+ and cannot end round 3j−2
+ with value 1−b
+.
+
+We conclude that there exists a bit b∈0,1
+ such that every party that starts the coin round 3j
+ has a value in b,⊥
+.
+
+Agreement: let j⋆
+ be the first phase in which some non-faulty party outputs a value at the end of round 3j⋆−1
+, and let this value be b
+. The deciding party received at least q
+ messages in round 3j⋆−1
+, all equal to b
+. Any other non-faulty party that reaches the end of round 3j⋆−1
+ also received at least q
+ messages in that round, and since q>|C3j⋆−1|/2
+ their sender sets intersect in at least one sender from C3j⋆−1∖F
+, so it received at least one message with value b
+. Hence any party that enters the next phase has value b
+. So an argument similar to the validity above implies that all non-faulty parties output b
+ by the end of round 3(j⋆+1)−1
+.
+
+Expected Termination: fix a phase j
+. If no party outputs a value by the end of round 3j−1
+, then by the previous claim there exists a bit b
+ such that every non-faulty party starts the coin round 3j
+ with value in b,⊥
+. In the coin round, the weak coin is α
+-correct with α≥1/5
+, so for this particular bit b
+ we have that with probability at least 1/5
+ all non-faulty parties output coin value b
+. Parties with value ⊥
+ adopt the coin bit, so at the end of round 3j
+ all non-faulty parties have value b
+. In the next phase, an argument similar to the validity above implies that all non-faulty parties output b
+ by the end of round 3(j+1)−1
+. Therefore, each phase leads to a decision with constant probability, so the expected number of phases, and hence rounds, to decide is constant.
+
+Message complexity: in each round r
+, only the committee Cr
+ sends messages, and each sender broadcasts to all n
+ parties, so the number of messages in round r
+ is n⋅|Cr|
+. Lemma 1 gives |Cr|∈[ℓ,h]=Θ(log6n)
+, hence the message complexity per round is Θ(nlog6n)
+. In the agreement rounds, each message carries a constant size value, so the bit complexity per agreement round is Θ(nlog6n)
+. In the coin round, each sender also includes a rank in [1..n]
+, which costs Θ(logn)
+ bits, so the bit complexity of the coin round is Θ(nlog6nlogn)
+. Over a constant expected number of phases, the expected total communication is O(nlogγn)
+ for γ=7
+.
+
+Proofs for measure concentration lemmas
+Proof of Lemma 1:
+
+Let K
+ be the random variable that counts the number of parties that have rank at most k
+. Then K
+ is binomial with Pr[rank≤k]=k/n
+, and from linearity of expectation, E[K]=μ=log6n
+.
+
+For simplicity, we apply measure concentration via a generic two sided Chernoff bound. For 0<β<1
+:
+
+Pr[‖K−μ‖≥βμ]≤2e−μβ2/3(5)
+Taking μ=log6n
+ and β=log−2n
+ we get βμ=log4n
+ and μβ2=log2n
+, hence:
+
+Pr[‖K−μ‖≥log4n]≤2e−log2n/3=n−O(logn)(6)
+This concludes the proof with δ1=2e−log2n/3=n−O(logn)
+. Here log
+ is the natural logarithm, changing the base only affects constants.
+
+We will apply this lemma a polynomially bounded number of times, so even when we union bound over all applications we get an error of δ=n−O(logn)
+.
+
+Proof of Lemma 2:
+
+Condition on |C|=m∈[ℓ,h]
+ and on the set F
+ of parties corrupted before round j
+. Since ranks in round j
+ are fresh and independent, C
+ is a uniform size-m
+ subset of [n]
+.
+
+Let X=|C∩F|
+ be the number of faulty parties in C
+. Since C
+ is sampled uniformly without replacement, X
+ is hypergeometric with μ=E[X∣m]=m⋅|F|n≤m2+ϵ
+.
+
+We must show X≤m−q
+. The worst case is m=ℓ
+, in which case m−q=3ℓ/2−h=k2−52log4n=:T
+.
+
+With ϵ=1/logn
+, μ≤ℓ2+ϵ=k2−Θ(log5n)
+. Thus, T=(1+α)μ
+ for some α=Θ(1/logn)
+. Using an upper-tail Chernoff bound, Pr[X≥T]≤exp(−Ω(μα2))=exp(−Ω(log4n))
+.
+
+Therefore, conditioned on |C|∈[ℓ,h]
+, with probability at least 1−δ2
+, we have X≤m−q
+, equivalently |C∖F|≥q
+.
+
+Notes
+The protocol can be adapted to multi-valued agreement using a weak leader election instead of a weak common coin.
+We will explore how to extend this protocol to Byzantine agreement in a future post.
+Its a good exercise to verify that the protocol can obtain uniform agreement.
+Its also a good exercise to add an explicit termination detection mechanism so that parties can know when to stop sending messages.
+Your thoughts on X.
+
+Tags: randomness
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Asynchronous Agreement Part One: Defining the problem
+Written by Ittai Abraham, Naama Ben-David, Sravya Yandamuri
+Posted on March 30, 2022
+In this series of posts, we explore the marvelous world of consensus in the Asynchronous model. In this post, we start by simply defining the problem. Recall the FLP theorem:
+
+FLP theorem 1985: Any protocol where no two non-faulty parties decide different values in the asynchronous model that is resilient to even just one crash failure must have an infinite execution.
+
+A naive interpretation would be that consensus is impossible, and indeed only weaker primitives like Reliable Broadcast and Gather are possible, so what’s the point of this post?
+
+Since FLP shows we cannot get always agreement and always termination, maybe we can get something that is weaker but essentially good enough? This leads to the following natural definition of Asynchronous Agreement:
+
+(Weak Validity): If all parties are non-faulty and have the same input value, then all parties must decide that value.
+(Agreement): No two non-faulty parties decide on different values.
+(Finite Expected Termination:) The expected number of rounds till all non-faulty parties decide is finite.
+Weak validity and agreement properties are standard. The weak validity will be strengthened in the authenticated model (to external validity, see below for discussion). The termination property is more subtle and raises several questions. The first question is: how do you define the number of rounds in the Asynchronous model? the short answer is that the number of rounds of an execution is the total time divided by the longest message delay. For a longer discussion see our blog post asynchronous round complexity. The second question is an expectation over what? The answer is:
+
+For a protocol P
+ with n
+ parties to have expected termination ET(P,n)
+, means that for every adversary strategy, we take expectation over executions of P
+ using the random choices of the parties.
+ET(P,n)=maxADV strategyEX∼runs(P,n, random coins, ADV strategy)X(1)
+Where X
+ is a random variable that equals the number of rounds till all non-faulty parties decide.
+
+Note that this definition of termination is still underdefined. We need to carefully define what are the possible adversary strategies. Can the adversary make adaptive decisions based on the protocol execution? If so, what information does the adversary have at each stage?
+
+Assuming the adversary is static (also called an oblivious adversary) and has to decide all its actions ahead of time sounds quite naive. It’s very natural to assume your adversary is observing the protocol and adaptively reacting to it. Even though we assume the adversary is adaptive, we need to put some limits on its power. In particular that it cannot guess future coins (formally, those coins are unpredictable). Moreover, in some implementations of common coins there is a need to assume a private channel model, where the adversary cannot see the content of messages sent between non-corrupted parties.
+
+So in the standard adaptive model, we assume the adversary has control over the network and over corruptions. At any given step it can decide what message to deliver, with a global restriction that each message must be eventually delivered. In addition, it can decide what parties to corrupt, up to a total of f
+ parties (parties corrupted cannot be un-corrupted). Once a party is corrupted, the adversary may have additional power over that party depending on the model (in the omission model, it can decide what message to omit, in the Byzantine model, it has full control). Finally, the adversary can make all these decisions adaptively assuming it can see all the messages sent to all corrupted parties at the time of decision (but in the private channel model cannot see the content of messages sent between non-corrupted parties; only the fact that a message has been sent).
+
+So we can now restate the termination property more formally as follows:
+
+(Finite Expected Termination:) We say a protocol P
+ for n
+ parties has Finite Expected Termination, if for any finite n
+ there exists some finite number t(n)
+, such that ET(p,n)<t(n)
+. For any adaptive strategy the adversary chooses, the expected number of rounds it takes to reach a state where all non-faulty parties decide (and terminate) is at most t(n)
+.
+This definition naturally leads to the question of efficiency, what values of t(n)
+ are possible? Must t(n)
+ be a function of n
+ or can it be an absolute constant? We will answer this in future posts.
+
+In the second post, we cover Ben-Or’s classic protocol.
+
+A note on the Byzantine and authenticated model
+In the authenticated model where the adversary is computationally bounded there are two main differences:
+
+Often a stronger notion of External Validity can be obtained (see Cachin, Kursawe, Petzold, Shoup 2001). This property is important for State Machine Replication in the Byzantine model. Recent work by Goren, Moses, Spiegelman 2021 shows that Qualitative Validity is the strongest achievable property, in particular it combines both weak and external validity along with the probabilistic decision quality suggested by Abraham, Malkhi, Spiegelman 2018.
+In addition, we cannot simply go over all adversary strategies (because there may be exponentially many of them). The solution suggested by Cachin etal is to assume a probabilistic polynomial-time bounded adversary so that the probability of breaking the cryptography is negligible (where the probability is taken with respect to the PKI and DKG setup) and to show that conditioned on some negligible events not happening, the conditional expectation is finite. Another path is to use a Dolev-Yao type model and assume the cryptography implements a perfect functionality. While this model’s assumptions don’t hold in reality (cryptography is not perfect), it has proven to be quite a good proxy for distributed protocols.
+Link to the second post on Ben-Or’s classic protocol and third post on a modern variant
+
+Acknowledgements
+We thank maxper for valuable feedback.
+
+Your thoughts/comments on Twitter.
+
+Tags: asynchrony consensus consensus101
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Asynchronous Agreement Part Two: Ben-Or's protocol
+Written by Ittai Abraham, Namma Ben-David, Sravya Yandamuri
+Posted on March 30, 2022
+We continue to explore the marvelous world of consensus in the Asynchronous model. In this post, we present Ben-Or’s classic protocol from 1983. In the next post, we will present a more modern version that is a simplified version from our paper.
+
+In the previous post we defined the problem of Asynchronous Agreement, so without further ado, here is Ben-Or’s protocol for Binary Asynchronous Agreement with n=2f+1
+ parties assuming the adversary can crash f
+ parties:
+
+Ben-Or's Protocol for party i
+
+input: v (0 or 1)
+r:=1
+
+while true
+    send <echo1, r, v> to all
+    wait for f+1 <echo1, r, *>
+        if all have value w, then send <echo2, r, w> to all
+        otherwise send <echo2, r, bot> to all
+    wait for f+1 <echo2, r, *>
+        if all have the same non-bot value u, then decide(u)
+        if all have the value bot, then v:= coin()
+        otherwise, v:=u where u is a non-bot value from <echo2, r, *>
+    r++    
+Note that this protocol does not terminate when it decides. Adding a termination gadget that provides termination in the crash model is quite simple:
+
+Termination Gadget for crash failures
+
+If receive <decide u>, then
+    decide(u) 
+If decide(u), then
+    send <decide u> to all
+    Terminate
+Why does Ben-Or’s protocol work? The first thing to check is Weak Validity (if all are non-faulty and start with b
+ then all decide b
+). Indeed, if all parties have the same input b
+, and no party is faulty, then clearly all parties will send <echo1, 1, b>, hence will see f+1
+ <echo1, 1, b> message after one round, hence will send <echo2, 1, b>, hence will see f+1
+ <echo2, 1, b> message and decide (and terminate from the termination gadget).
+
+The next property to verify is Agreement (that no two parties decide on different values). This follows from two simple claims:
+
+Claim 1: there cannot be <echo2, r, 0> and <echo2, r, 1>. This follows from quorum intersection, sending echo2 requires f+1
+ echo1 of the same value, but this would mean one party sent both <echo1, r, 0> and <echo1, r, 1> which is not possible.
+
+Claim 2: if one party sees f+1
+ messages for <echo2, r, u> then all parties will see at least one message for <echo2, r, u>. This follows since at least one of the f+1
+ parties that sent <echo2, r, u> is non-faulty and again from quorum intersection.
+
+Combing both claims, we can now look at the first round r
+ in which a party decided value u
+, and conclude that any party that reaches the end of round r
+ will have v=u
+. We can now use the argument above for Weak Validity and prove that all non-faulty parties will decide u
+ by round r+1
+.
+
+Now for the hard part. Why does this protocol have Finite Expected Termination?
+
+It turns out that this is a non-trivial theorem for an adaptive adversary. It took over 15 years to realize via a rather complicated argument:
+
+Theorem: [Aguilera, Toueg 1998]: Ben-Or’s protocol with n=2f+1
+ parties has an Finite Expected Termination of O(22n)
+.
+
+This leaves us in an unsatisfying state. While Ben-Or’s protocol is elegant, the proof for Finite Expected Termination is non-trivial and not easily taught in a standard class (or a short blog post). Is there a simpler proof? Maybe there is a reason for the complexity? Another concrete question is about efficiency: can we improve the O(22n)
+ bound to a more natural O(2n)
+ bound?
+
+More fundamentally, the question we ask is: how should we argue about the expected termination of Asynchronous protocols with an adaptive adversary? Is there a more general framework that can allow us to decompose the problem?
+
+We will answer this in the next post.
+
+Thoughts and comments on Twitter.
+
+Tags: asynchrony consensus101 consensus
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+
+Decentralized Thoughts
+Authors
+Videos
+Start Here
+Course
+
+Asynchronous Agreement Part Three: a Modern version of Ben-Or's protocol
+Written by Ittai Abraham, Naama Ben-David, Sravya Yandamuri
+Posted on March 30, 2022
+In this series of posts, we explore the marvelous world of consensus in the Asynchronous model. In this third post, we present a modern version of Ben-Or’s classic protocol that is part of our new work on Asynchronous Agreement. In the first post we defined the problem and in the second post we presented Ben-Or’s protocol. This is a simplified version extracted from our paper.
+
+We decompose Ben-Or’s protocol into an outer protocol and an inner protocol (which we call Graded Binding Crusader Agreement (GBCA)). This decomposition allows us to reason more modularly and easily about each part. In particular, we show how to carefully reason about an adaptive adversary, by forcing the adversary to bind to a certain value so that its future options are limited by the protocol.
+
+Graded Binding Crusader Agreement (GBCA)
+Graded Binding Crusader agreement is similar to other agreement problems in that each party has an input value, and must eventually decide on an output value. There are two differences: First, in addition to deciding on an output value, each party also decides on a grade∈0,1,2
+. Second, while the input value is either 0 or 1, the output value can be either 0, or 1, or a special value ⊥
+. GBCA has the following five properties:
+
+Weak Agreement: If two parties output values x
+ and y
+, then either x=y
+ or at least one of the values is ⊥
+.
+Validity: If all parties have the same input x
+, then all outputs will be with value x
+ and grade 2.
+Termination: All non-faulty parties terminate after a constant number of rounds.
+The grade is used for the fourth property:
+
+Knowledge of Agreement: If a party outputs value x
+ and grade 2, then all outputs will be with value x
+ with grade ≥1
+.
+It is critical to prevent the adversary from being able to pick the output value of a party after seeing the first non-faulty party output a value. We call this additional property Binding since the adversary is bound to a specific output value from each crusader agreement instance. We do so with the fifth property:
+
+Binding: At the time at which the first party outputs a value, there is a value b∈0,1
+ such that no party outputs value 1−b
+ in any extension of this execution.
+Intuitively, GBCA does two things useful for asynchronous agreement. First, it forces the adversary to choose either non-0 or non-1, before the adversary knows the coin values. Second, it lets a party decide if it sees a grade of 2. Given these properties it’s easy to implement Asynchronous Agreement:
+
+Asynchronous Agreement from Graded Binding Crusader Agreement
+The pseudo-code for Asynchronous Agreement from Graded Binding Crusader Agreement is quite simple:
+
+Asynchronous Agreement for party i
+
+input: v (0 or 1)
+r:= 1
+
+while true
+    (value, grade) := GBCA(r,v)
+    if grade = 2, then decide(value)
+    if value = bot, then v:= coin()
+    otherwise v:= value
+    r++    
+Note that we add the round number r
+ to each GBCA instance to differentiate the instances of each round. For termination, we use the folklore termination gadget described in the previous post.
+
+The Asynchronous Agreement property of Weak Validity follows from the GBCA Validity property directly. Similarly, the Asynchronous Agreement property of Agreement follows from the GBCA Knowledge of Agreement property. So let’s focus on the Asynchronous Agreement property of Finite Expected Termination.
+
+Claim: The protocol terminates in an expected O(2n)
+ rounds.
+
+Proof: in every round r
+ the adversary has to bind to some value b
+ before seeing any coin value. Now with probability O(2−n)
+ all the coins for this round r
+ turn out to be b
+. If this event happens, then from the GBCA Weak Agreement property, all parties end the GBCA with either b
+ or ⊥
+. In either case, since all coins are b
+, each party that starts round r+1
+ will have the same value b
+. Hence they will all decide b
+ and terminate at the end of round r+1
+.
+
+Note that this bound is significantly better than the O(22n)
+ bound obtained by Aguilera and Toueg 1998. Moreover, we will discuss in later posts, our protocol provides better bounds with a weak common coin.
+
+We hope that the relative simplicity of the termination argument is convincing evidence of the advantage of modularizing the protocol. All we need to do now is provide a protocol that solves Graded Binding Crusader Agreement against an adaptive adversary.
+
+A protocol for Graded Binding Crusader Agreement
+The protocol for GBCA is rather simple, using three rounds of exchange:
+
+GBCA for party i
+
+input: v (0 or 1)
+input: r (round number)
+
+send <echo1, r, v> to all
+wait for n-f <echo1, r, *>
+    if all have value w, then send <echo2, r, w> to all
+    otherwise, send <echo2, r, bot> to all
+wait for n-f <echo2, r, *>
+    if all have value w, then send <echo3, r, w> to all
+    otherwise, send <echo3, r, bot> to all
+wait for n-f <echo3, r, *>
+    if all have the same non-bot value u, then output u, grade 2
+    if all have the value bot, then output bot, grade 0
+    otherwise, if u is a non-bot value from <echo3, r, *>, then output u, grade 1
+Let’s go over the five GBCA properties and prove them one by one assuming n>2f
+ and the adversary can corrupt and apply crash faults to at most f
+ parties:
+
+Weak Agreement: this follows from quorum intersection on echo1 messages. Since n>2f
+, it cannot be that n−f
+ parties send <echo1,r,1> and n−f
+ parties send <echo1,r,0>. Thus, only one non-bot value can be sent in an <echo2, r, *> message, and therefore the same applies to echo3 messages, and to the decision value.
+
+Validity: follows from the first condition of each of the three rounds.
+
+Termination: follows since parties only wait for n−f
+ responses for each of the three rounds.
+
+Knowledge of Agreement: follows from Weak Agreement and the echo3 quorum intersection, it cannot be that one party sees n−f
+ <echo3,r,b> for value b
+ (has grade 2), but some other party sees n−f
+ <echo3,r,*> with not even one having value b
+.
+
+Binding: Consider the time at which the first non-faulty party i
+ sends <echo3, r, *>. Case 1: if any of the n−f
+ <echo2, r, *> messages i
+ received had a non-⊥
+ value w
+, then from Weak Agreement the adversary has binding to w
+. So the only remaining case is Case 2: that party i
+ heard n−f
+ <echo2, r, bot> messages. In that case, from quorum intersection on echo2, any party that sees n−f
+ <echo2, r, *> messages must see at least one <echo2, r, bot>, hence all such parties will send <echo3, r, bot>. Therefore, in this case, all parties will output ⊥
+ hence the adversary binding to both 1 and 0.
+
+To conclude, the first round gives Weak Agreement, the second round gives Binding, and the third round gives Knowledge of Agreement.
+
+Observe that the binding event happens when the first non-faulty sends echo3, which is one round earlier than the first party ends of the protocol. This will be important when more sophisticated common coins are used.
+
+In the next post we will consider the Byzantine adversary case.
+
+Your thoughts and comments on Twitter
+
+Tags: asynchrony consensus research
+Share:
+← Previous PostNext Post →
+Twitter
+Decentralized Thinkers  •  2026
+
+Theme by beautiful-jekyll
+

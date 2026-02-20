@@ -146,3 +146,6 @@ class BAProtocol:
             inst.decided = True
             inst.decided_value = value
             inst.decided_event.set()
+            # Wake up any round waiting on votes so it sees inst.decided
+            for evt in inst._vote_events.values():
+                evt.set()

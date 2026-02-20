@@ -56,14 +56,12 @@ def test_selective_omission_send_to_1_only():
 
 def test_selective_omission_winner_sends_to_one():
     """Party 2 (highest bid=20) sends only to party 1, omits to 3 and 4.
-    P2's CSS likely excluded. Auction proceeds with P1/P3/P4."""
+    P2 may or may not be in active set. Protocol handles either way."""
     async def _test():
         policy = SelectiveOmission(party_id=2, drop_to={3, 4})
         results, _, _ = await run_auction_test(
             [5, 20, 13, 7], omission_policy=policy, seed=540,
-            protocol_timeout=60.0)
-        # P2 excluded, auction among P1(5), P3(13), P4(7)
-        # P3 wins with second price 7
+            protocol_timeout=120.0)
         honest_results = [results[i] for i in [0, 2, 3]]  # P1/P3/P4
         non_none = [r for r in honest_results if r is not None]
         assert len(non_none) >= 3

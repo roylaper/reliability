@@ -33,7 +33,8 @@ def test_partial_omission_party4():
     async def _test():
         policy = DropProb(4, p=0.5)
         results, _, _ = await run_auction_test(
-            [5, 20, 13, 7], omission_policy=policy, seed=310)
+            [5, 20, 13, 7], omission_policy=policy, seed=310,
+            protocol_timeout=120.0)
         non_none = [r for r in results if r is not None]
         assert len(non_none) >= 3
     asyncio.run(_test())

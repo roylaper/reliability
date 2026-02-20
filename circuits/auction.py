@@ -72,14 +72,12 @@ class SecondPriceAuction:
         # Party i is the winner if it beats all others
         is_max = []
         for i in range(m):
-            product = gt[(i, 0 if i != 0 else 1)]
-            first = True
+            product = None
             for j in range(m):
                 if j == i:
                     continue
-                if first:
+                if product is None:
                     product = gt[(i, j)]
-                    first = False
                 else:
                     product = await self.mpc.multiply(
                         product, gt[(i, j)], f"max_{parties[i]}_{j}")
