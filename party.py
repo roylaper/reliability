@@ -1,7 +1,8 @@
 """Party: encapsulates a single MPC participant with event-driven message dispatch.
 
-Uses RBC + BA based ACS (theory-faithful), CSS with RBC evidence,
-and output privacy via mask-and-open.
+Fully asynchronous, no synchrony assumptions. Protocol proceeds on evidence
+thresholds (n-f events), never on wall-clock timeouts. The only timeout is the
+outer harness guard in run() which is NOT part of the protocol logic.
 """
 
 import asyncio
@@ -26,7 +27,7 @@ class Party:
                  network: Network, beacon: RandomnessBeacon,
                  random_bit_sharings: list[dict[int, FieldElement]] | None = None,
                  mask_sharings: list[dict[int, FieldElement]] | None = None,
-                 protocol_timeout: float = 30.0):
+                 protocol_timeout: float = 60.0):
         self.party_id = party_id
         self.n = n
         self.f = f
@@ -47,39 +48,38 @@ class Party:
             party_id, n, f, network, self.mpc,
             self.bit_decomp, self.comparison, self.output_privacy)
 
-        # Load preprocessed random bits
         if random_bit_sharings:
             self.bit_decomp.load_random_bits(random_bit_sharings)
 
-        # Store mask sharings for output privacy
         self._mask_shares: list[FieldElement] = []
         if mask_sharings:
             self._mask_shares = [ms[party_id] for ms in mask_sharings]
 
+        # Track CSS acceptances with an event that fires at n-f
+        self._accepted_dealers: set[int] = set()
+        self._enough_accepted = asyncio.Event()
+
         # Message dispatch table
         self._handlers = {
-            # RBC messages (used by ACS)
             "RBC_INIT": self.rbc.handle_init,
             "RBC_ECHO": self.rbc.handle_echo,
             "RBC_READY": self.rbc.handle_ready,
-            # BA messages (used by ACS)
             "BA_VOTE": self.acs.ba.handle_vote,
             "BA_DECIDE": self.acs.ba.handle_decide,
-            # CSS messages (direct echo/ready)
             "CSS_SHARE": self.css.handle_share,
             "CSS_ECHO": self.css.handle_echo,
             "CSS_READY": self.css.handle_ready,
             "CSS_RECOVER": self.css.handle_recover,
             "CSS_REVEAL": self.css.handle_reveal,
-            # MPC messages
             "MUL_RESHARE": self.mpc.handle_reshare,
             "MPC_OPEN": self.mpc.handle_open,
-            # Output privacy messages
             "MASK_SHARE": self.output_privacy.handle_mask_share,
         }
 
     async def run(self) -> FieldElement | None:
-        """Main party coroutine. Returns auction output."""
+        """Main entry point. The outer timeout is a TEST HARNESS guard only,
+        not a protocol decision. Under the async model, honest parties
+        terminate with probability 1 (via beacon-driven BA)."""
         dispatcher = asyncio.create_task(self._message_dispatcher())
 
         try:
@@ -87,6 +87,8 @@ class Party:
                 self._run_protocol(), timeout=self.protocol_timeout)
             return result
         except asyncio.TimeoutError:
+            # Harness guard — should not happen for honest parties
+            # under reasonable simulation delays
             return None
         finally:
             dispatcher.cancel()
@@ -96,61 +98,56 @@ class Party:
                 pass
 
     async def _run_protocol(self) -> FieldElement | None:
-        """Execute the full auction protocol."""
+        """Fully event-driven protocol. No timeouts in protocol logic."""
+
         # Phase 1: Share own bid via CSS
         my_session = f"input_{self.party_id}"
         await self.css.share(self.bid, my_session)
+        self._accepted_dealers.add(self.party_id)
+        self._check_enough_accepted()
 
-        # Phase 2: Wait for n-f=3 CSS sharings to be accepted (finalized)
-        accepted_dealers = set()
-        accepted_dealers.add(self.party_id)
-
-        wait_tasks = []
+        # Phase 2: Wait for n-f CSS acceptances (event-driven, no timeout)
+        # Start background tasks that watch for each dealer's CSS to finalize
         for pid in range(1, self.n + 1):
             if pid != self.party_id:
-                wait_tasks.append(self._wait_for_acceptance(pid, accepted_dealers))
-        await asyncio.gather(*wait_tasks)
+                asyncio.create_task(self._watch_css_acceptance(pid))
 
-        if len(accepted_dealers) < self.n - self.f:
-            return None
+        await self._enough_accepted.wait()
 
-        # Phase 3: ACS to agree on active set (uses RBC + BA internally)
-        active_set = await asyncio.wait_for(
-            self.acs.run(accepted_dealers), timeout=15.0)
+        # Phase 3: ACS (event-driven RBC + BA, no timeouts)
+        active_set = await self.acs.run(self._accepted_dealers)
 
-        # Phase 4: Set active set for MPC multiplication
+        # Phase 4: Set active set for MPC
         self.mpc.set_active_set(active_set)
 
-        # Phase 5: Collect our shares of each active party's bid
+        # Phase 5: Collect bid shares
         bid_shares = {}
         for pid in active_set:
             session = f"input_{pid}"
             bid_shares[pid] = self.css.get_share(session)
 
-        # Phase 6: Run auction with output privacy
+        # Phase 6: Run auction
         result = await self.auction.run(
             bid_shares, active_set, self._mask_shares or None)
         return result
 
-    async def _wait_for_acceptance(self, dealer_id: int, accepted: set):
+    async def _watch_css_acceptance(self, dealer_id: int):
+        """Watch for a dealer's CSS to finalize. Runs as background task."""
         session = f"input_{dealer_id}"
-        try:
-            await asyncio.wait_for(
-                self.css.wait_accepted(session), timeout=3.0)
-            accepted.add(dealer_id)
-        except asyncio.TimeoutError:
-            pass
+        await self.css.wait_accepted(session)
+        self._accepted_dealers.add(dealer_id)
+        self._check_enough_accepted()
+
+    def _check_enough_accepted(self):
+        if len(self._accepted_dealers) >= self.n - self.f:
+            self._enough_accepted.set()
 
     async def _message_dispatcher(self):
-        """Event-driven message dispatch: one reader per incoming channel."""
-        readers = []
-        for sender_id in range(1, self.n + 1):
-            if sender_id != self.party_id:
-                readers.append(self._channel_reader(sender_id))
+        readers = [self._channel_reader(s)
+                   for s in range(1, self.n + 1) if s != self.party_id]
         await asyncio.gather(*readers)
 
     async def _channel_reader(self, sender_id: int):
-        """Read messages from a single incoming channel and dispatch."""
         channel = self.network.channels[(sender_id, self.party_id)]
         while True:
             try:

@@ -1,9 +1,11 @@
 """Agreement on Common Set (ACS) using RBC + BA.
 
-Theory-faithful construction:
-1. Each party RBC-broadcasts its proposal (accepted dealer set)
-2. For each party j, run BA_j to decide inclusion
-3. Output set = {j : BA_j decided 1}
+Fully event-driven, no timeouts:
+1. Each party RBC-broadcasts its proposal
+2. As RBC instances deliver, start BA with input 1
+3. Once n-f BA instances decide 1, input 0 for all remaining
+4. Wait for all BA instances to finish
+5. Return {j : BA_j decided 1}
 """
 
 import asyncio
@@ -14,7 +16,7 @@ from protocols.ba import BAProtocol
 
 
 class ACSProtocol:
-    """ACS built from RBC + BA for a single party."""
+    """ACS built from RBC + BA. Fully event-driven."""
 
     def __init__(self, party_id: int, n: int, f: int,
                  network: Network, beacon: RandomnessBeacon,
@@ -29,57 +31,72 @@ class ACSProtocol:
     async def run(self, accepted_dealers: set[int]) -> set[int]:
         """Run ACS. Returns the agreed-upon set of dealer IDs (size >= n-f).
 
-        1. RBC-broadcast own proposal
-        2. Collect RBC deliveries to determine BA inputs
-        3. Run BA_j for each j to decide inclusion
-        4. Return {j : BA_j decided 1}
+        No timeouts. Progress is driven by RBC deliveries and BA decisions.
         """
-        # Step 1: RBC-broadcast own accepted set
+        # Step 1: RBC-broadcast own proposal
         tag = f"acs_propose_{self.party_id}"
         await self.rbc.broadcast(tag, list(accepted_dealers))
 
-        # Step 2: Wait for RBC deliveries from other parties
-        # Give time for RBC to propagate, then determine BA inputs
-        delivered_proposals: dict[int, set[int]] = {}
-        delivered_proposals[self.party_id] = accepted_dealers
+        # Step 2: Track which RBC proposals have been delivered
+        delivered = set()
+        delivered.add(self.party_id)  # Own proposal is trivially delivered
 
-        # Try to collect proposals from all parties (with timeout for omitting ones)
-        async def collect_proposal(pid):
-            try:
-                ptag = f"acs_propose_{pid}"
-                val = await self.rbc.wait_deliver(pid, ptag, timeout=3.0)
-                delivered_proposals[pid] = set(val)
-            except asyncio.TimeoutError:
-                pass  # Party probably omitting
+        # BA results and coordination
+        ba_decided_1_count = 0
+        ba_decided_1_enough = asyncio.Event()  # fires when n-f BA decide 1
+        ba_started: set[int] = set()
+        ba_results: dict[int, int] = {}
+        all_ba_done = asyncio.Event()
 
-        wait_tasks = []
+        lock = asyncio.Lock()
+
+        async def on_ba_result(j: int, value: int):
+            nonlocal ba_decided_1_count
+            async with lock:
+                ba_results[j] = value
+                if value == 1:
+                    ba_decided_1_count += 1
+                    if ba_decided_1_count >= self.n - self.f:
+                        ba_decided_1_enough.set()
+                if len(ba_results) == self.n:
+                    all_ba_done.set()
+
+        async def run_ba_for(j: int, estimate: int):
+            result = await self.ba.run(ba_index=j, initial_estimate=estimate)
+            await on_ba_result(j, result)
+
+        # Step 3: Watch for RBC deliveries and start BA with input 1
+        async def watch_rbc(pid: int):
+            ptag = f"acs_propose_{pid}"
+            val = await self.rbc.wait_deliver(pid, ptag)
+            async with lock:
+                delivered.add(pid)
+                if pid not in ba_started:
+                    ba_started.add(pid)
+                    asyncio.create_task(run_ba_for(pid, 1))
+
+        # Start watching all other parties' RBC proposals
         for pid in range(1, self.n + 1):
             if pid != self.party_id:
-                wait_tasks.append(collect_proposal(pid))
-        await asyncio.gather(*wait_tasks)
+                asyncio.create_task(watch_rbc(pid))
 
-        # Step 3: Determine BA inputs
-        # For each dealer j: input 1 if j was accepted by enough delivered proposals
-        # A dealer j is "viable" if at least one delivered proposal includes j
-        # But the simplest correct approach: input 1 to BA_j if we ourselves
-        # accepted j's CSS AND we got RBC delivery for j's proposal
-        ba_inputs = {}
-        for j in range(1, self.n + 1):
-            if j in accepted_dealers and j in delivered_proposals:
-                ba_inputs[j] = 1
-            else:
-                ba_inputs[j] = 0
+        # Start BA for own proposal immediately with input 1
+        # (our own RBC trivially delivers to us)
+        if self.party_id in accepted_dealers:
+            ba_started.add(self.party_id)
+            asyncio.create_task(run_ba_for(self.party_id, 1))
 
-        # Step 4: Run all BA instances in parallel
-        async def run_ba(j):
-            return await self.ba.run(ba_index=j, initial_estimate=ba_inputs[j])
+        # Step 4: Once n-f BA instances decide 1, input 0 for all remaining
+        await ba_decided_1_enough.wait()
 
-        ba_results = await asyncio.gather(*[run_ba(j) for j in range(1, self.n + 1)])
+        async with lock:
+            for j in range(1, self.n + 1):
+                if j not in ba_started:
+                    ba_started.add(j)
+                    asyncio.create_task(run_ba_for(j, 0))
 
-        # Step 5: Output set
-        result = set()
-        for j_idx, j in enumerate(range(1, self.n + 1)):
-            if ba_results[j_idx] == 1:
-                result.add(j)
+        # Step 5: Wait for all BA instances to complete
+        await all_ba_done.wait()
 
-        return result
+        # Step 6: Return agreed set
+        return {j for j, v in ba_results.items() if v == 1}

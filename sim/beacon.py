@@ -34,3 +34,4 @@ class RandomnessBeacon:
 
         await self._events[beacon_index].wait()
         return self._values[beacon_index]
+ 

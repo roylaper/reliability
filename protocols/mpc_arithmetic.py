@@ -1,8 +1,15 @@
 """MPC arithmetic: addition (local) and multiplication (BGW with degree reduction).
 
-Handles partial omission: if not all reshares arrive within a timeout,
-falls back to using the n-f reshares that did arrive. All honest parties
-converge on the same subset because honest parties' reshares always arrive.
+Fully event-driven, no timeouts in protocol logic:
+- Multiplication waits for ALL reshares from the active set.
+- open_value waits for f+1 shares (sufficient for reconstruction).
+- No wall-clock timeouts affect protocol decisions.
+
+For active sets where all members are honest (guaranteed when the omitter is
+excluded by ACS), all reshares arrive and the protocol completes. If a selective
+omitter enters the active set, per-gate BA would be needed to agree on the
+reshare subset — this is noted as a known theoretical limitation of the fixed-T
+optimization (see design docs).
 """
 
 import asyncio
@@ -14,10 +21,6 @@ from sim.network import Network, Message
 class MPCArithmetic:
     """Arithmetic operations on secret-shared values for a single party."""
 
-    # Timeout per multiplication gate for collecting reshares.
-    # If not all active set reshares arrive within this, fall back to n-f subset.
-    RESHARE_TIMEOUT = 0.3
-
     def __init__(self, party_id: int, n: int, f: int, network: Network):
         self.party_id = party_id
         self.n = n
@@ -25,15 +28,18 @@ class MPCArithmetic:
         self.network = network
 
         self._active_set: list[int] | None = None
+        self._lagrange_coeffs: list[FieldElement] | None = None
 
         # Reshare state: session_id -> {sender_party: share_for_me}
         self._reshares: dict[str, dict[int, FieldElement]] = {}
-        self._reshare_events: dict[str, asyncio.Event] = {}  # fires when ALL arrive
-        self._reshare_enough_events: dict[str, asyncio.Event] = {}  # fires at n-f
+        self._reshare_all_event: dict[str, asyncio.Event] = {}  # all active set
+        self._reshare_enough_event: dict[str, asyncio.Event] = {}  # f+1 for open
 
     def set_active_set(self, active_set: set[int]):
-        """Set the active set T determined by ACS."""
+        """Set the active set T determined by ACS. Precompute Lagrange coefficients."""
         self._active_set = sorted(active_set)
+        x_values = [FieldElement(pid) for pid in self._active_set]
+        self._lagrange_coeffs = lagrange_coefficients_at_zero(x_values)
 
     def add(self, share_a: FieldElement, share_b: FieldElement) -> FieldElement:
         return share_a + share_b
@@ -48,9 +54,8 @@ class MPCArithmetic:
                        session_id: str) -> FieldElement:
         """Multiply two secret-shared values using BGW degree reduction.
 
-        Waits for all reshares from the active set. If a partial omitter
-        causes some reshares to not arrive, falls back to using the n-f
-        reshares that did arrive (sufficient for degree reduction from 2f to f).
+        Waits for reshares from ALL parties in the active set (no timeout).
+        All honest parties' reshares are guaranteed to arrive.
         """
         assert self._active_set is not None, "Must call set_active_set first"
 
@@ -58,84 +63,66 @@ class MPCArithmetic:
         h_i = share_a * share_b
 
         # Step 2: Reshare h_i with degree-f polynomial
-        self._ensure_reshare_session(session_id)
+        self._ensure_session(session_id)
         if self.party_id in self._active_set:
             poly = Polynomial.random(degree=self.f, constant=h_i)
             for j in range(1, self.n + 1):
                 share_val = poly.evaluate(FieldElement(j))
                 if j == self.party_id:
                     self._reshares[session_id][self.party_id] = share_val
-                    self._check_reshare_progress(session_id)
+                    self._check_reshare_all(session_id)
                 else:
                     await self.network.send(
                         self.party_id, j,
                         Message("MUL_RESHARE", self.party_id, {
                             "session_id": session_id,
                             "share_value": share_val.value,
-                        }, session_id)
-                    )
+                        }, session_id))
 
-        # Step 3: Wait for reshares — optimistic (all) with timeout fallback (n-f)
-        try:
-            await asyncio.wait_for(
-                self._reshare_events[session_id].wait(),
-                timeout=self.RESHARE_TIMEOUT)
-            # All reshares arrived — use the full active set
-            used_set = list(self._active_set)
-        except asyncio.TimeoutError:
-            # Not all arrived — wait for at least n-f (guaranteed to arrive)
-            await self._reshare_enough_events[session_id].wait()
-            # Use whichever active set members' reshares arrived
-            used_set = sorted(
-                pid for pid in self._active_set
-                if pid in self._reshares[session_id]
-            )
+        # Step 3: Wait for ALL reshares from active set (event-driven, no timeout)
+        await self._reshare_all_event[session_id].wait()
 
-        # Step 4: Recombine using Lagrange coefficients for the used set
-        x_values = [FieldElement(pid) for pid in used_set]
-        lambdas = lagrange_coefficients_at_zero(x_values)
-
+        # Step 4: Recombine using precomputed Lagrange coefficients
         result = FieldElement.zero()
-        for idx, pid in enumerate(used_set):
-            result = result + lambdas[idx] * self._reshares[session_id][pid]
+        for idx, pid in enumerate(self._active_set):
+            lambda_i = self._lagrange_coeffs[idx]
+            q_i_of_me = self._reshares[session_id][pid]
+            result = result + lambda_i * q_i_of_me
 
         return result
 
-    def _ensure_reshare_session(self, session_id: str):
+    def _ensure_session(self, session_id: str):
         if session_id not in self._reshares:
             self._reshares[session_id] = {}
-        if session_id not in self._reshare_events:
-            self._reshare_events[session_id] = asyncio.Event()
-        if session_id not in self._reshare_enough_events:
-            self._reshare_enough_events[session_id] = asyncio.Event()
+        if session_id not in self._reshare_all_event:
+            self._reshare_all_event[session_id] = asyncio.Event()
+        if session_id not in self._reshare_enough_event:
+            self._reshare_enough_event[session_id] = asyncio.Event()
 
-    def _check_reshare_progress(self, session_id: str):
-        """Check reshare collection progress."""
+    def _check_reshare_all(self, session_id: str):
+        """Check if ALL active set reshares arrived."""
         if self._active_set is None:
             return
         received = set(self._reshares[session_id].keys())
-        active_received = received & set(self._active_set)
-
-        # Check if n-f arrived (enough for fallback)
-        if len(active_received) >= self.n - self.f:
-            if session_id in self._reshare_enough_events:
-                self._reshare_enough_events[session_id].set()
-
-        # Check if ALL arrived (optimal path)
         if all(pid in received for pid in self._active_set):
-            self._reshare_events[session_id].set()
+            self._reshare_all_event[session_id].set()
+
+    def _check_open_enough(self, open_key: str):
+        """For open_value, f+1 shares suffice."""
+        if len(self._reshares.get(open_key, {})) >= self.f + 1:
+            self._reshare_enough_event[open_key].set()
 
     async def handle_reshare(self, msg: Message):
         sid = msg.payload["session_id"]
-        self._ensure_reshare_session(sid)
+        self._ensure_session(sid)
         share_val = FieldElement(msg.payload["share_value"])
         self._reshares[sid][msg.sender] = share_val
-        self._check_reshare_progress(sid)
+        self._check_reshare_all(sid)
 
     async def open_value(self, share: FieldElement, session_id: str) -> FieldElement:
         """Open (reveal) a secret-shared value to all parties."""
         open_key = f"open_{session_id}"
-        self._ensure_reshare_session(open_key)
+        self._ensure_session(open_key)
 
         msg = Message("MPC_OPEN", self.party_id, {
             "session_id": session_id,
@@ -144,9 +131,9 @@ class MPCArithmetic:
         await self.network.broadcast(self.party_id, msg)
 
         self._reshares[open_key][self.party_id] = share
-        self._check_open_complete(open_key)
+        self._check_open_enough(open_key)
 
-        await self._reshare_events[open_key].wait()
+        await self._reshare_enough_event[open_key].wait()
 
         points = [
             (FieldElement(pid), s)
@@ -154,16 +141,10 @@ class MPCArithmetic:
         ]
         return Polynomial.interpolate_at_zero(points[:self.f + 1])
 
-    def _check_open_complete(self, open_key: str):
-        if len(self._reshares.get(open_key, {})) >= self.f + 1:
-            if open_key not in self._reshare_events:
-                self._reshare_events[open_key] = asyncio.Event()
-            self._reshare_events[open_key].set()
-
     async def handle_open(self, msg: Message):
         sid = msg.payload["session_id"]
         open_key = f"open_{sid}"
-        self._ensure_reshare_session(open_key)
+        self._ensure_session(open_key)
         share_val = FieldElement(msg.payload["share_value"])
         self._reshares[open_key][msg.sender] = share_val
-        self._check_open_complete(open_key)
+        self._check_open_enough(open_key)
