@@ -3,7 +3,7 @@
 Uses pre-generated random bit sharings (from preprocessing) + bit subtraction circuit.
 """
 
-import secrets
+import rng
 from field import FieldElement, PRIME
 from polynomial import Polynomial
 from mpc_arithmetic import MPCArithmetic
@@ -20,7 +20,7 @@ def preprocess_random_bit_sharings(n: int, f: int, count: int) -> list[dict[int,
     """
     result = []
     for _ in range(count):
-        bit = secrets.randbelow(2)
+        bit = rng.randbelow(2)
         poly = Polynomial.random(degree=f, constant=FieldElement(bit))
         shares = {i: poly.evaluate(FieldElement(i)) for i in range(1, n + 1)}
         result.append(shares)

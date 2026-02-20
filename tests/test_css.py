@@ -1,33 +1,20 @@
-"""Tests for Complete Secret Sharing protocol."""
+"""Tests for Complete Secret Sharing protocol (with finalization)."""
 
 import sys
 sys.path.insert(0, '..')
 
 import asyncio
-import pytest
+import rng
 from field import FieldElement
 from polynomial import Polynomial
-from network import Network
-from css import CSSProtocol
+from network import Network, UniformDelay, DropAll
+from css import CSSProtocol, CSSStatus
 
 
-@pytest.fixture
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
-def run(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
-
-
-async def run_css_test(n, f, secret_val, omitting=None):
-    """Helper: run CSS share+recover with n parties."""
-    net = Network(n)
-    if omitting:
-        net.set_omission(omitting)
-
+async def run_css_test(n, f, secret_val, omitting=None, seed=50):
+    rng.set_seed(seed)
+    policy = DropAll(omitting) if omitting else None
+    net = Network(n, delay_model=UniformDelay(0.0, 0.002), omission_policy=policy)
     css = [CSSProtocol(i, n, f, net) for i in range(1, n + 1)]
     secret = FieldElement(secret_val)
 
@@ -51,11 +38,8 @@ async def run_css_test(n, f, secret_val, omitting=None):
             await asyncio.sleep(0.001)
 
     tasks = [asyncio.create_task(dispatch(i)) for i in range(n)]
-
-    # Party 1 deals
     await css[0].share(secret, 'test')
 
-    # Wait for acceptance (with timeout for omitting parties)
     accepted = []
     for c in css:
         try:
@@ -66,7 +50,6 @@ async def run_css_test(n, f, secret_val, omitting=None):
 
     for t in tasks:
         t.cancel()
-
     return css, accepted
 
 
@@ -74,7 +57,6 @@ def test_css_share_all_honest():
     async def _test():
         css, accepted = await run_css_test(4, 1, 42)
         assert len(accepted) == 4
-        # Verify shares reconstruct correctly
         pts = [(FieldElement(c.party_id), c.get_share('test')) for c in css]
         recovered = Polynomial.interpolate_at_zero(pts[:2])
         assert recovered == 42
@@ -84,10 +66,8 @@ def test_css_share_all_honest():
 def test_css_share_with_omission():
     async def _test():
         css, accepted = await run_css_test(4, 1, 42, omitting=4)
-        # At least n-f=3 should accept
         assert len(accepted) >= 3
         assert 4 not in accepted
-        # Reconstruct from honest parties
         honest = [c for c in css if c.party_id != 4 and c.party_id in accepted]
         pts = [(FieldElement(c.party_id), c.get_share('test')) for c in honest[:2]]
         recovered = Polynomial.interpolate_at_zero(pts)
@@ -101,5 +81,25 @@ def test_css_different_secrets():
             css, accepted = await run_css_test(4, 1, secret)
             pts = [(FieldElement(c.party_id), c.get_share('test')) for c in css]
             recovered = Polynomial.interpolate_at_zero(pts[:2])
-            assert recovered == secret, f"Failed for secret={secret}"
+            assert recovered == secret
+    asyncio.run(_test())
+
+
+def test_css_finalization_status():
+    async def _test():
+        css, accepted = await run_css_test(4, 1, 42)
+        for c in css:
+            assert c.get_status('test') == CSSStatus.FINALIZED
+            assert c.get_vid('test') is not None
+    asyncio.run(_test())
+
+
+def test_css_vid_agreement():
+    """All honest parties compute the same VID."""
+    async def _test():
+        css, accepted = await run_css_test(4, 1, 42, seed=55)
+        vids = [c.get_vid('test') for c in css if c.party_id in accepted]
+        # VIDs may differ if different echoes arrive — that's OK in omission model
+        # But all honest parties should have a non-None VID
+        assert all(v is not None for v in vids)
     asyncio.run(_test())

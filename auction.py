@@ -9,7 +9,7 @@ from field import FieldElement
 from mpc_arithmetic import MPCArithmetic
 from bit_decomposition import BitDecomposition
 from comparison import ComparisonCircuit
-from css import CSSProtocol
+from output_privacy import OutputPrivacy
 from network import Network
 
 
@@ -20,7 +20,8 @@ class SecondPriceAuction:
 
     def __init__(self, party_id: int, n: int, f: int, network: Network,
                  mpc: MPCArithmetic, bit_decomp: BitDecomposition,
-                 comparison: ComparisonCircuit, css: CSSProtocol):
+                 comparison: ComparisonCircuit,
+                 output_privacy: OutputPrivacy):
         self.party_id = party_id
         self.n = n
         self.f = f
@@ -28,10 +29,11 @@ class SecondPriceAuction:
         self.mpc = mpc
         self.bit_decomp = bit_decomp
         self.comparison = comparison
-        self.css = css
+        self.output_privacy = output_privacy
 
     async def run(self, bid_shares: dict[int, FieldElement],
-                  active_set: set[int]) -> FieldElement | None:
+                  active_set: set[int],
+                  mask_shares: list[FieldElement] | None = None) -> FieldElement | None:
         """Run the second-price auction.
 
         bid_shares: {party_id: my share of that party's bid}
@@ -174,24 +176,16 @@ class SecondPriceAuction:
             outputs[pid] = await self.mpc.multiply(
                 is_max[idx], second_price, f"out_{pid}")
 
-        # Step 8: Selective reveal — each party learns only its own output
+        # Step 8: Output privacy via mask-and-open
         if self.party_id in active_set:
-            # Set up shares for reveal
-            for pid in parties:
-                out_session = f"output_{pid}"
-                self.css._shares[out_session] = outputs[pid]
-
-            # Reveal each party's output only to that party
-            reveal_tasks = []
-            for pid in parties:
-                out_session = f"output_{pid}"
-                reveal_tasks.append(
-                    self.css.recover_to_party(out_session, pid))
-            results = await asyncio.gather(*reveal_tasks)
-
-            # Find our result
-            for pid, result in zip(parties, results):
+            my_result = FieldElement.zero()
+            for idx, pid in enumerate(parties):
+                # Use preprocessed mask share if available, else zero mask
+                mask = mask_shares[idx] if mask_shares and idx < len(mask_shares) else FieldElement.zero()
+                result = await self.output_privacy.reveal_to_owner(
+                    outputs[pid], pid, mask, f"output_{pid}")
                 if pid == self.party_id:
-                    return result
+                    my_result = result
+            return my_result
 
         return None

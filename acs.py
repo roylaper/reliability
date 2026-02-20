@@ -1,68 +1,85 @@
-"""Agreement on Common Set for omission failure model.
+"""Agreement on Common Set (ACS) using RBC + BA.
 
-Determines which parties' CSS sharings to include in the computation.
-Output: set of at least n-f dealer IDs whose sharings are accepted.
+Theory-faithful construction:
+1. Each party RBC-broadcasts its proposal (accepted dealer set)
+2. For each party j, run BA_j to decide inclusion
+3. Output set = {j : BA_j decided 1}
 """
 
 import asyncio
 from network import Network, Message
+from beacon import RandomnessBeacon
+from rbc import RBCProtocol
+from ba import BAProtocol
 
 
 class ACSProtocol:
-    """ACS protocol instance for a single party."""
+    """ACS built from RBC + BA for a single party."""
 
-    def __init__(self, party_id: int, n: int, f: int, network: Network):
+    def __init__(self, party_id: int, n: int, f: int,
+                 network: Network, beacon: RandomnessBeacon,
+                 rbc: RBCProtocol):
         self.party_id = party_id
         self.n = n
         self.f = f
         self.network = network
-
-        self._votes: dict[int, set[int]] = {}  # voter -> set of dealers they accepted
-        self._result: set[int] | None = None
-        self._done = asyncio.Event()
+        self.rbc = rbc
+        self.ba = BAProtocol(party_id, n, f, network, beacon)
 
     async def run(self, accepted_dealers: set[int]) -> set[int]:
-        """Run ACS. accepted_dealers = set of dealer IDs whose CSS we accepted.
+        """Run ACS. Returns the agreed-upon set of dealer IDs (size >= n-f).
 
-        Returns the agreed-upon set of dealer IDs (size >= n-f).
+        1. RBC-broadcast own proposal
+        2. Collect RBC deliveries to determine BA inputs
+        3. Run BA_j for each j to decide inclusion
+        4. Return {j : BA_j decided 1}
         """
-        # Broadcast our vote
-        msg = Message("ACS_VOTE", self.party_id, {
-            "accepted": list(accepted_dealers),
-        }, "acs")
-        await self.network.broadcast(self.party_id, msg)
+        # Step 1: RBC-broadcast own accepted set
+        tag = f"acs_propose_{self.party_id}"
+        await self.rbc.broadcast(tag, list(accepted_dealers))
 
-        # Record own vote
-        self._votes[self.party_id] = accepted_dealers
+        # Step 2: Wait for RBC deliveries from other parties
+        # Give time for RBC to propagate, then determine BA inputs
+        delivered_proposals: dict[int, set[int]] = {}
+        delivered_proposals[self.party_id] = accepted_dealers
 
-        # Wait for result
-        await self._check_result()
-        await self._done.wait()
-        return self._result
+        # Try to collect proposals from all parties (with timeout for omitting ones)
+        async def collect_proposal(pid):
+            try:
+                ptag = f"acs_propose_{pid}"
+                val = await self.rbc.wait_deliver(pid, ptag, timeout=3.0)
+                delivered_proposals[pid] = set(val)
+            except asyncio.TimeoutError:
+                pass  # Party probably omitting
 
-    async def handle_vote(self, msg: Message):
-        """Handle incoming ACS_VOTE message."""
-        voter = msg.sender
-        accepted = set(msg.payload["accepted"])
-        self._votes[voter] = accepted
-        await self._check_result()
+        wait_tasks = []
+        for pid in range(1, self.n + 1):
+            if pid != self.party_id:
+                wait_tasks.append(collect_proposal(pid))
+        await asyncio.gather(*wait_tasks)
 
-    async def _check_result(self):
-        """Check if we can determine the common set."""
-        # Need votes from at least n-f parties
-        if len(self._votes) < self.n - self.f:
-            return
+        # Step 3: Determine BA inputs
+        # For each dealer j: input 1 if j was accepted by enough delivered proposals
+        # A dealer j is "viable" if at least one delivered proposal includes j
+        # But the simplest correct approach: input 1 to BA_j if we ourselves
+        # accepted j's CSS AND we got RBC delivery for j's proposal
+        ba_inputs = {}
+        for j in range(1, self.n + 1):
+            if j in accepted_dealers and j in delivered_proposals:
+                ba_inputs[j] = 1
+            else:
+                ba_inputs[j] = 0
 
-        # A dealer is confirmed if at least f+1 parties voted for it
-        confirmed = set()
-        for dealer_id in range(1, self.n + 1):
-            vote_count = sum(
-                1 for voter_set in self._votes.values()
-                if dealer_id in voter_set
-            )
-            if vote_count >= self.f + 1:
-                confirmed.add(dealer_id)
+        # Step 4: Run all BA instances in parallel
+        async def run_ba(j):
+            return await self.ba.run(ba_index=j, initial_estimate=ba_inputs[j])
 
-        if len(confirmed) >= self.n - self.f:
-            self._result = confirmed
-            self._done.set()
+        ba_results = await asyncio.gather(*[run_ba(j) for j in range(1, self.n + 1)])
+
+        # Step 5: Output set
+        result = set()
+        for j_idx, j in enumerate(range(1, self.n + 1)):
+            if ba_results[j_idx] == 1:
+                result.add(j)
+
+        return result

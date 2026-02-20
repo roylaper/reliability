@@ -1,6 +1,6 @@
 """Finite field arithmetic over F_p where p = 2^127 - 1 (Mersenne prime)."""
 
-import secrets
+import rng
 
 PRIME = (1 << 127) - 1  # 2^127 - 1
 
@@ -85,12 +85,12 @@ class FieldElement:
     @staticmethod
     def random():
         """Return a random non-zero field element."""
-        return FieldElement(secrets.randbelow(PRIME - 1) + 1)
+        return FieldElement(rng.randbelow(PRIME - 1) + 1)
 
     @staticmethod
     def random_including_zero():
         """Return a random field element (may be zero)."""
-        return FieldElement(secrets.randbelow(PRIME))
+        return FieldElement(rng.randbelow(PRIME))
 
     @staticmethod
     def zero():
