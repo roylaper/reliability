@@ -1,14 +1,11 @@
 """Tests for Complete Secret Sharing protocol (with finalization)."""
 
-import sys
-sys.path.insert(0, '..')
-
 import asyncio
-import rng
-from field import FieldElement
-from polynomial import Polynomial
-from network import Network, UniformDelay, DropAll
-from css import CSSProtocol, CSSStatus
+from core import rng
+from core.field import FieldElement
+from core.polynomial import Polynomial
+from sim.network import Network, UniformDelay, DropAll
+from protocols.css import CSSProtocol, CSSStatus
 
 
 async def run_css_test(n, f, secret_val, omitting=None, seed=50):
@@ -39,7 +36,6 @@ async def run_css_test(n, f, secret_val, omitting=None, seed=50):
 
     tasks = [asyncio.create_task(dispatch(i)) for i in range(n)]
     await css[0].share(secret, 'test')
-
     accepted = []
     for c in css:
         try:
@@ -47,7 +43,6 @@ async def run_css_test(n, f, secret_val, omitting=None, seed=50):
             accepted.append(c.party_id)
         except asyncio.TimeoutError:
             pass
-
     for t in tasks:
         t.cancel()
     return css, accepted
@@ -62,7 +57,6 @@ def test_css_share_all_honest():
         assert recovered == 42
     asyncio.run(_test())
 
-
 def test_css_share_with_omission():
     async def _test():
         css, accepted = await run_css_test(4, 1, 42, omitting=4)
@@ -74,7 +68,6 @@ def test_css_share_with_omission():
         assert recovered == 42
     asyncio.run(_test())
 
-
 def test_css_different_secrets():
     async def _test():
         for secret in [0, 1, 15, 31]:
@@ -84,7 +77,6 @@ def test_css_different_secrets():
             assert recovered == secret
     asyncio.run(_test())
 
-
 def test_css_finalization_status():
     async def _test():
         css, accepted = await run_css_test(4, 1, 42)
@@ -93,13 +85,9 @@ def test_css_finalization_status():
             assert c.get_vid('test') is not None
     asyncio.run(_test())
 
-
 def test_css_vid_agreement():
-    """All honest parties compute the same VID."""
     async def _test():
         css, accepted = await run_css_test(4, 1, 42, seed=55)
         vids = [c.get_vid('test') for c in css if c.party_id in accepted]
-        # VIDs may differ if different echoes arrive — that's OK in omission model
-        # But all honest parties should have a non-None VID
         assert all(v is not None for v in vids)
     asyncio.run(_test())

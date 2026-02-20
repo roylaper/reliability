@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from collections import defaultdict
 
-import rng
+from core import rng
 
 
 # --- Delay Models ---
@@ -107,6 +107,33 @@ class DropTypes(OmissionPolicy):
         if sender == self.party_id and msg.msg_type in self.msg_types:
             return rng.random() < self.p
         return False
+
+
+class SelectiveOmission(OmissionPolicy):
+    """Party sends to some recipients but omits to others.
+
+    Models the key adversarial behavior: a corrupt party selectively
+    chooses which parties receive its messages.
+    """
+    def __init__(self, party_id: int, drop_to: set[int]):
+        """
+        party_id: the omitting party
+        drop_to: set of party IDs that will NOT receive messages from party_id
+        """
+        self.party_id = party_id
+        self.drop_to = drop_to
+
+    def should_drop(self, sender, receiver, msg) -> bool:
+        return sender == self.party_id and receiver in self.drop_to
+
+
+class CompositeOmission(OmissionPolicy):
+    """Combine multiple omission policies (drop if ANY policy says drop)."""
+    def __init__(self, policies: list[OmissionPolicy]):
+        self.policies = policies
+
+    def should_drop(self, sender, receiver, msg) -> bool:
+        return any(p.should_drop(sender, receiver, msg) for p in self.policies)
 
 
 class BurstDrop(OmissionPolicy):

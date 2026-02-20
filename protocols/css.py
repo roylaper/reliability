@@ -8,9 +8,9 @@ RBC is used separately by ACS for proposals, not inside CSS.
 import asyncio
 import hashlib
 from enum import Enum
-from field import FieldElement
-from polynomial import Polynomial, lagrange_coefficients_at_zero
-from network import Network, Message
+from core.field import FieldElement
+from core.polynomial import Polynomial, lagrange_coefficients_at_zero
+from sim.network import Network, Message
 
 
 class CSSStatus(Enum):

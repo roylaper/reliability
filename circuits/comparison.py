@@ -1,7 +1,7 @@
 """Comparison circuit: greater-than on secret-shared bit vectors."""
 
-from field import FieldElement
-from mpc_arithmetic import MPCArithmetic
+from core.field import FieldElement
+from protocols.mpc_arithmetic import MPCArithmetic
 
 
 class ComparisonCircuit:

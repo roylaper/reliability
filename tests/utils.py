@@ -1,16 +1,14 @@
 """Test utilities: reference oracle, assertion helpers."""
 
-import sys
-sys.path.insert(0, '..')
-
 import asyncio
-import rng
-from field import FieldElement
-from polynomial import Polynomial
-from network import Network, UniformDelay, ExponentialDelay, DropAll, DropProb, AdversarialDelay
-from beacon import RandomnessBeacon
+from core import rng
+from core.field import FieldElement
+from core.polynomial import Polynomial
+from sim.network import (Network, UniformDelay, ExponentialDelay,
+                         DropAll, DropProb, AdversarialDelay)
+from sim.beacon import RandomnessBeacon
 from party import Party
-from bit_decomposition import preprocess_random_bit_sharings
+from circuits.bit_decomposition import preprocess_random_bit_sharings
 
 
 def preprocess_mask_sharings(n, f, count):
@@ -62,20 +60,17 @@ def assert_correctness(results, bids, omitting_party=None):
               if omitting_party is None or i + 1 != omitting_party]
     winner_id, second_price = reference_auction(bids, active)
 
-    # Winner should get second price
     winner_result = results[winner_id - 1]
     assert winner_result is not None, f"Winner P{winner_id} got None"
     assert winner_result.to_int() == second_price, \
         f"Winner P{winner_id} got {winner_result.to_int()}, expected {second_price}"
 
-    # Non-winners in active set should get 0
     for pid in active:
         if pid != winner_id:
             r = results[pid - 1]
             assert r is not None, f"Active P{pid} got None"
             assert r.to_int() == 0, f"P{pid} got {r.to_int()}, expected 0"
 
-    # Omitting party should get None
     if omitting_party:
         assert results[omitting_party - 1] is None, \
             f"Omitting P{omitting_party} should get None"

@@ -3,10 +3,10 @@
 Uses pre-generated random bit sharings (from preprocessing) + bit subtraction circuit.
 """
 
-import rng
-from field import FieldElement, PRIME
-from polynomial import Polynomial
-from mpc_arithmetic import MPCArithmetic
+from core import rng
+from core.field import FieldElement, PRIME
+from core.polynomial import Polynomial
+from protocols.mpc_arithmetic import MPCArithmetic
 
 
 def preprocess_random_bit_sharings(n: int, f: int, count: int) -> list[dict[int, FieldElement]]:

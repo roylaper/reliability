@@ -19,10 +19,13 @@ A secure second-price auction implemented using asynchronous Multi-Party Computa
 ## Quick Start
 
 ```bash
-# Run the auction with 3 demo scenarios
+# Run the auction with demo scenarios
 python3 main.py
 
-# Run all tests (47 tests)
+# Run with specific seed for reproducibility
+python3 main.py 42
+
+# Run all tests (77 tests)
 python3 -m pytest tests/ -v
 ```
 
@@ -39,213 +42,228 @@ Bids: {1: 5, 2: 20, 3: 13, 4: 7}
   Party 4: not the winner (output=0)
 
 --- Metrics ---
-  Messages sent: 2124
-  Time: 3.316s
+  Messages sent: 2355
+  By type:
+    BA_DECIDE: 48
+    BA_VOTE: 48
+    CSS_ECHO: 36
+    CSS_READY: 36
+    CSS_SHARE: 12
+    MASK_SHARE: 12
+    MPC_OPEN: 168
+    MUL_RESHARE: 918
+    RBC_ECHO: 144
+    RBC_INIT: 48
+    RBC_READY: 144
+```
+
+## Project Structure
+
+```
+relabilty/
+├── main.py                     # Entry point — runs auction scenarios
+├── party.py                    # Party state machine (event-driven dispatch)
+├── CLAUDE.md                   # Exercise specification
+├── README.md
+│
+├── core/                       # Shared primitives
+│   ├── __init__.py
+│   ├── field.py                # Finite field arithmetic (F_p, p=2^127-1)
+│   ├── polynomial.py           # Polynomial operations, Lagrange interpolation
+│   └── rng.py                  # Deterministic PRNG for reproducible tests
+│
+├── sim/                        # Simulation infrastructure
+│   ├── __init__.py
+│   ├── network.py              # Async channels, delay models, omission policies
+│   ├── beacon.py               # Randomness beacon (threshold f+1)
+│   └── metrics.py              # Execution timing metrics
+│
+├── protocols/                  # Distributed protocol modules
+│   ├── __init__.py
+│   ├── rbc.py                  # Bracha Reliable Broadcast (INIT/ECHO/READY)
+│   ├── ba.py                   # Binary Agreement with beacon coin (Ben-Or)
+│   ├── acs.py                  # Agreement on Common Set (RBC + BA)
+│   ├── css.py                  # Complete Secret Sharing (echo/ready + VID)
+│   ├── mpc_arithmetic.py       # BGW multiplication with degree reduction
+│   └── output_privacy.py       # Mask-and-open + private unmask
+│
+├── circuits/                   # Auction-specific computation
+│   ├── __init__.py
+│   ├── bit_decomposition.py    # Secret-shared value -> secret-shared bits
+│   ├── comparison.py           # Greater-than on shared bit vectors
+│   └── auction.py              # Second-price auction circuit
+│
+├── tests/                      # Test suite (77 tests)
+│   ├── __init__.py
+│   ├── utils.py                # Reference oracle, assertion helpers
+│   ├── test_field.py           # Field arithmetic (15 tests)
+│   ├── test_polynomial.py      # Lagrange interpolation (8 tests)
+│   ├── test_rbc.py             # Reliable broadcast (4 tests)
+│   ├── test_ba.py              # Binary agreement (5 tests)
+│   ├── test_acs.py             # Agreement on common set (3 tests)
+│   ├── test_css.py             # Secret sharing + finalization (5 tests)
+│   ├── test_mpc.py             # MPC arithmetic (8 tests)
+│   ├── test_comparison.py      # Bit decomposition + comparison (6 tests)
+│   ├── test_auction.py         # Full auction integration (6 tests)
+│   ├── test_honest.py          # Multiple configs x seeds (5 tests)
+│   ├── test_one_omitter.py     # Each party as omitter (6 tests)
+│   ├── test_random_delays.py   # Exponential/uniform delay stress (3 tests)
+│   └── test_adversarial.py     # Adversarial scheduling (2 tests)
+│
+└── maor_suggestions/           # Design guidance documents
+    ├── README_Project1_Detailed_Design_Plan.md
+    └── README_Project1_Design_Rationale.md
 ```
 
 ## Architecture
 
-All 4 parties run as `asyncio` coroutines in a single Python process. Communication happens through in-memory `asyncio.Queue` channels. Omission failures are simulated by dropping messages on designated channels.
-
 ```
                     +-----------+
-                    |  main.py  |  Entry point, runs scenarios
+                    |  main.py  |  Entry point
                     +-----+-----+
                           |
                     +-----+-----+
-                    |  party.py |  Event-driven message dispatch
+                    | party.py  |  Event-driven dispatch
                     +-----+-----+
                           |
-          +---------------+---------------+
-          |               |               |
-    +-----+-----+  +-----+-----+  +------+------+
-    |  css.py   |  |  acs.py   |  | mpc_arith.  |
-    |  Secret   |  | Agreement |  | Addition &  |
-    |  Sharing  |  | on Common |  | Multiply    |
-    +-----------+  |   Set     |  | (BGW)       |
-                   +-----------+  +------+------+
-                                         |
-                              +----------+----------+
-                              |                     |
-                      +-------+-------+   +---------+---------+
-                      | bit_decomp.py |   |  comparison.py    |
-                      | Value -> Bits |   |  Greater-than     |
-                      +-------+-------+   +---------+---------+
-                              |                     |
-                      +-------+---------------------+-------+
-                      |            auction.py               |
-                      |  Second-price auction circuit       |
-                      +-------------------------------------+
+     +--------------------+--------------------+
+     |                    |                    |
++----+----+       +-------+-------+    +-------+-------+
+|  core/  |       | protocols/    |    | circuits/     |
+| field   |       | rbc  (Bracha) |    | bit_decomp    |
+| poly    |       | ba   (Ben-Or) |    | comparison    |
+| rng     |       | acs  (RBC+BA) |    | auction       |
++---------+       | css  (share)  |    +---------------+
+                  | mpc  (BGW)    |
+     +----+       | output_priv   |
+     |sim/|       +---------------+
+     |net |
+     |bcn |
+     +----+
 ```
 
 ## Protocol Flow
 
 ```
-Phase 1: CSS Share     Each party secret-shares its bid
-Phase 2: CSS Accept    Wait for n-f=3 sharings to be accepted
-Phase 3: ACS           Agree on which parties' bids to include
-Phase 4: Auction       Bit decompose -> Compare -> Find winner -> Mask output
-Phase 5: Reveal        Winner learns second price; others learn nothing
+Phase 1: CSS Share       Each party secret-shares its bid (echo/ready)
+Phase 2: CSS Finalize    Wait for n-f=3 sharings to be finalized (VID binding)
+Phase 3: ACS             RBC-broadcast proposals, run BA per dealer, agree on active set
+Phase 4: MPC Compute     Bit decompose -> Compare -> Find winner -> Mask output
+Phase 5: Output Privacy  Mask-and-open: public open masked value, private unmask
 ```
 
-## File Descriptions
+## Directory Descriptions
 
-### Core Primitives
+### `core/` — Shared Primitives
 
-#### `field.py` (102 lines)
-Finite field arithmetic over F_p where p = 2^127 - 1.
+#### `field.py`
+Finite field arithmetic over F_p where p = 2^127 - 1 (Mersenne prime). `FieldElement` class with `+`, `-`, `*`, `/`, `**`, `inverse()`, `random()`.
 
-- **`FieldElement`** — Supports `+`, `-`, `*`, `/`, `**`, negation, comparison
-- `inverse()` — Via Fermat's little theorem: a^(p-2) mod p
-- `random()` — Cryptographic randomness via `secrets.randbelow`
-- `zero()`, `one()`, `to_int()` — Utility methods
+#### `polynomial.py`
+Polynomial operations: `evaluate()` (Horner's), `random(degree, constant)`, `interpolate_at_zero(points)` (Lagrange), `lagrange_coefficients_at_zero()`.
 
-#### `polynomial.py` (74 lines)
-Polynomial operations and Lagrange interpolation.
+#### `rng.py`
+Deterministic PRNG wrapper. Call `rng.set_seed(n)` for reproducible tests. Default uses `os.urandom` for cryptographic randomness.
 
-- **`Polynomial`** — Coefficients list (index 0 = constant term)
-- `evaluate(x)` — Horner's method
-- `random(degree, constant)` — Random polynomial with fixed p(0)
-- `interpolate_at_zero(points)` — Lagrange interpolation at x=0 (used for secret reconstruction)
-- `lagrange_coefficients_at_zero(x_values)` — Precompute coefficients for degree reduction
+### `sim/` — Simulation Infrastructure
 
-#### `network.py` (104 lines)
-Async communication layer with omission failure simulation.
+#### `network.py`
+Async message-passing layer with configurable:
+- **Delay models**: `UniformDelay`, `ExponentialDelay`, `FixedDelay`, `AdversarialDelay`
+- **Omission policies**: `DropAll`, `DropProb(p)`, `DropTypes(types)`, `BurstDrop(intervals)`
+- **Metrics**: per-message-type counts, total sent/dropped
 
-- **`Message`** — Tagged with `msg_type`, `sender`, `payload`, `session_id`
-- **`MessageChannel`** — Wraps `asyncio.Queue` with configurable delay and `dropped` flag
-- **`Network`** — Creates n*(n-1) unidirectional channels
-  - `send()`, `broadcast()` — Async message delivery
-  - `set_omission(party_id)` — Silently drop all messages to/from a party
-- **`NetworkMetrics`** — Counts messages sent/dropped
+#### `beacon.py`
+Randomness beacon — releases random `FieldElement` when f+1=2 parties request the same index. Used by BA for common coin.
 
-#### `beacon.py` (37 lines)
-Randomness beacon — provides random field elements when f+1 parties request.
+#### `metrics.py`
+Simple wall-clock timing tracker.
 
-- **`RandomnessBeacon`** — `request(beacon_index, party_id)` blocks until threshold (f+1=2) parties request the same index, then releases a random `FieldElement`
+### `protocols/` — Distributed Protocol Modules
 
-#### `metrics.py` (25 lines)
-Simple execution timing tracker.
+#### `rbc.py` — Bracha Reliable Broadcast
+Per-instance protocol keyed by (sender, tag):
+- INIT -> ECHO -> READY -> DELIVER
+- Thresholds: n-f=3 echoes, f+1=2 readys (amplification), n-f=3 readys (deliver)
+- Guarantees: if one honest party delivers, all honest parties deliver the same value
 
-- **`Metrics`** — `start()`, `stop()`, `elapsed` property
+#### `ba.py` — Binary Agreement
+Ben-Or style with beacon as common coin:
+- Each round: broadcast vote, collect n-f votes
+- Supermajority -> decide; simple majority -> adopt; no majority -> beacon coin
+- Guarantees: all honest parties decide the same value
 
-### Protocol Layer
+#### `acs.py` — Agreement on Common Set
+Theory-faithful construction using RBC + BA:
+1. Each party RBC-broadcasts which CSS sharings it accepted
+2. For each dealer j, run BA_j to decide inclusion
+3. Output set = {j : BA_j decided 1}, size >= n-f=3
 
-#### `css.py` (246 lines)
-Complete Secret Sharing for the omission failure model. Simplified because parties never lie — any f+1 shares are guaranteed correct.
+#### `css.py` — Complete Secret Sharing
+Echo/ready dissemination with explicit finalization:
+- `CSSStatus`: PENDING / FINALIZED / INVALID
+- VID (value ID) computation via SHA-256 for binding
+- `share()`, `recover()`, `recover_to_party()`, `get_share()`, `wait_accepted()`
 
-- **`CSSProtocol`** — Per-party CSS instance
-  - `share(secret, session_id)` — Dealer creates degree-1 polynomial, distributes shares
-  - Echo phase: parties forward received shares to all others
-  - Ready phase: send READY after f+1 consistent echoes; accept after n-f READYs
-  - `recover(session_id)` — All parties exchange shares, interpolate at zero
-  - `recover_to_party(session_id, target)` — Selective reveal to one party only
-  - `get_share(session_id)` — Returns share (derives from echoes if dealer's direct message delayed)
+#### `mpc_arithmetic.py` — BGW Multiplication
+- `add()`, `sub()`, `scalar_mul()` — local (no communication)
+- `multiply()` — BGW: local product -> reshare with degree-f poly -> Lagrange recombination
+- `open_value()` — public reconstruction from f+1 shares
 
-#### `acs.py` (69 lines)
-Agreement on Common Set — determines which parties' inputs to use.
+#### `output_privacy.py` — Mask-and-Open
+- Compute [y] = [output] + [mask] (local)
+- Public open y (all reconstruct)
+- Send mask shares privately to owner
+- Owner computes output = y - mask
 
-- **`ACSProtocol`** — Per-party ACS instance
-  - `run(accepted_dealers)` — Broadcast which CSS sharings this party accepted
-  - A dealer is confirmed if f+1 parties voted for it
-  - Returns set of >= n-f confirmed dealers (the active set)
+### `circuits/` — Auction-Specific Computation
 
-#### `mpc_arithmetic.py` (152 lines)
-Secret-shared arithmetic operations.
+#### `bit_decomposition.py`
+Convert secret-shared value to secret-shared bits using pre-generated random bit sharings + ripple-borrow subtraction circuit. `preprocess_random_bit_sharings()` for offline phase.
 
-- **`MPCArithmetic`** — Per-party arithmetic engine
-  - `set_active_set(T)` — Set the ACS-determined active set, precompute Lagrange coefficients
-  - `add()`, `sub()`, `scalar_mul()` — Local operations (no communication)
-  - `multiply(share_a, share_b, session_id)` — BGW multiplication:
-    1. Local multiply → degree-2f sharing
-    2. Each party in T reshares with degree-f polynomial
-    3. Recombine via Lagrange coefficients → degree-f sharing of product
-  - `open_value(share, session_id)` — Broadcast shares, reconstruct from f+1
+#### `comparison.py`
+Greater-than on secret-shared bit vectors via MSB-to-LSB prefix scan. 3 multiplications per bit, 15 total for 5-bit values.
 
-### Circuit Layer
+#### `auction.py`
+Second-price auction circuit:
+1. Bit decompose all active bids
+2. Pairwise comparisons
+3. Winner = beats all others; second = 1 - max - min
+4. Second price = sum(bid_i * is_second_i)
+5. Output mask = is_max * second_price
+6. Reveal via output_privacy (mask-and-open)
 
-#### `bit_decomposition.py` (126 lines)
-Convert a secret-shared field element to secret-shared individual bits.
+### `party.py` — Orchestration
 
-- `preprocess_random_bit_sharings(n, f, count)` — Offline: generate random bit sharings (simulates beacon + CSS preprocessing)
-- **`BitDecomposition`** — Per-party bit decomposer
-  - `load_random_bits(sharings)` — Load preprocessed random bit shares
-  - `decompose(shared_value, num_bits, session_id)`:
-    1. Consume pre-generated random shared bits [r_0..r_4]
-    2. Compute [r] = sum(r_i * 2^i)
-    3. Open y = x + r publicly (safe: both < 32, no field wraparound)
-    4. Bit subtraction circuit: compute [x_i] from public y and shared r via ripple-borrow
-  - Each borrow step: 2 multiplications (XOR with borrow + carry computation)
+Event-driven state machine wiring all protocol instances. Spawns one asyncio reader per incoming channel. Dispatches messages to RBC/BA/CSS/MPC/output_privacy handlers.
 
-#### `comparison.py` (54 lines)
-Greater-than comparison on secret-shared bit vectors.
+### `main.py` — Entry Point
 
-- **`ComparisonCircuit`**
-  - `greater_than(bits_a, bits_b, session_id)` — MSB-to-LSB prefix scan:
-    - Per bit: compute [a_i * b_i], derive [gt_i] and [eq_i]
-    - Accumulate: result += prefix_eq * gt_i, then prefix_eq *= eq_i
-    - 3 multiplications per bit, 15 total for 5-bit values
-
-#### `auction.py` (198 lines)
-Second-price auction circuit — the main computation.
-
-- **`SecondPriceAuction`**
-  - `run(bid_shares, active_set)`:
-    1. **Bit decompose** all active bids
-    2. **Pairwise comparisons** — [a > b] for every pair
-    3. **Winner detection** — is_max[i] = product of all gt[(i,j)]
-    4. **Second-highest** — is_second[i] = 1 - is_max - is_min (m=3) or polynomial indicator (m=4)
-    5. **Second price** — [sp] = sum(bid_i * is_second_i)
-    6. **Output masking** — output_i = is_max_i * sp (winner gets price, others get 0)
-    7. **Selective reveal** — each party learns only its own output
-
-### Orchestration
-
-#### `party.py` (144 lines)
-Single MPC participant with event-driven message dispatch.
-
-- **`Party`** — Aggregates all protocol instances
-  - `run()` — Main coroutine (with 30s timeout for omitted parties):
-    1. Share own bid via CSS
-    2. Wait for n-f CSS acceptances (2s timeout per dealer)
-    3. ACS to agree on active set
-    4. Run auction computation
-  - Message dispatcher: spawns one `asyncio` reader task per incoming channel, routes messages to appropriate protocol handler by `msg_type`
-
-#### `main.py` (112 lines)
-Entry point — runs three demo scenarios.
-
-- `run_auction(bids, omitting_party)` — Full auction with metrics reporting
-- Three scenarios: all honest, non-winner omitting, would-be winner omitting
-- Preprocessing: generates 20 random bit sharings before each run
+Runs demo scenarios with configurable seed. Reports results and per-message-type metrics.
 
 ## Tests
 
-Run with `python3 -m pytest tests/ -v` (47 tests total).
+Run with `python3 -m pytest tests/ -v` (77 tests total).
 
-| Test File | Tests | What It Covers |
-|-----------|-------|----------------|
-| `test_field.py` | 15 | Field arithmetic: add, sub, mul, div, inverse, edge cases |
-| `test_polynomial.py` | 8 | Evaluation, Lagrange interpolation (degree 1 & 2), random polynomials |
-| `test_css.py` | 3 | Share/recover all honest, with omission, multiple secret values |
-| `test_mpc.py` | 8 | Addition, subtraction, scalar multiply, BGW multiplication, open |
-| `test_comparison.py` | 6 | Bit decomposition (0, 13, 31), comparison (>, <, ==) |
-| `test_auction.py` | 6 | Full integration: honest, omitting non-winner, omitting winner, edge bids, close bids, metrics |
-
-## Complexity
-
-| Phase | Multiplications | Messages (approx) |
-|-------|----------------|--------------------|
-| Bit decomposition (per bid) | ~10 | ~90 |
-| Comparison (per pair) | 15 | ~135 |
-| Winner/min detection | 6-9 | ~60 |
-| Second price computation | 3 | ~27 |
-| Output masking | 3 | ~27 |
-| **Total (4 active bids)** | **~170** | **~2100** |
-| **Total (3 active bids)** | **~120** | **~900** |
+| Test File | Tests | Category |
+|-----------|-------|----------|
+| `test_field.py` | 15 | Field arithmetic |
+| `test_polynomial.py` | 8 | Lagrange interpolation |
+| `test_rbc.py` | 4 | Reliable broadcast: honest, sender omits, non-sender omits, agreement |
+| `test_ba.py` | 5 | Binary agreement: unanimous, majority, split, omission |
+| `test_acs.py` | 3 | ACS: all honest, one omitter, agreement |
+| `test_css.py` | 5 | Secret sharing: honest, omission, finalization status, VID |
+| `test_mpc.py` | 8 | MPC: add, sub, scalar, multiply, open |
+| `test_comparison.py` | 6 | Bit decomposition + comparison |
+| `test_auction.py` | 6 | Full integration: honest, omission, edge bids, metrics |
+| `test_honest.py` | 5 | Multiple bid configs x seeds |
+| `test_one_omitter.py` | 6 | Each party as omitter, partial drop |
+| `test_random_delays.py` | 3 | Exponential/uniform delay stress |
+| `test_adversarial.py` | 2 | Adversarial scheduling |
+| **Total** | **77** | |
 
 ## Dependencies
 
-- **Python 3.11+** (for `asyncio`, type hints)
-- **Standard library only**: `asyncio`, `secrets`, `dataclasses`, `time`
+- **Python 3.11+**
+- **Standard library only**: `asyncio`, `hashlib`, `os`, `random`, `time`, `json`, `dataclasses`, `collections`, `enum`
 - **Testing**: `pytest`, `pytest-asyncio` (`pip3 install pytest pytest-asyncio`)

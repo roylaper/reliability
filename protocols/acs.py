@@ -7,10 +7,10 @@ Theory-faithful construction:
 """
 
 import asyncio
-from network import Network, Message
-from beacon import RandomnessBeacon
-from rbc import RBCProtocol
-from ba import BAProtocol
+from sim.network import Network, Message
+from sim.beacon import RandomnessBeacon
+from protocols.rbc import RBCProtocol
+from protocols.ba import BAProtocol
 
 
 class ACSProtocol:

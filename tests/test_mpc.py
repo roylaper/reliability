@@ -1,23 +1,17 @@
 """Tests for MPC arithmetic (addition and multiplication)."""
 
-import sys
-sys.path.insert(0, '..')
-
 import asyncio
-from field import FieldElement
-from polynomial import Polynomial
-from network import Network
-from mpc_arithmetic import MPCArithmetic
+from core.field import FieldElement
+from core.polynomial import Polynomial
+from sim.network import Network, UniformDelay
+from protocols.mpc_arithmetic import MPCArithmetic
 
 
 def make_sharing(n, f, secret):
-    """Create a proper degree-f sharing of secret."""
     poly = Polynomial.random(f, FieldElement(secret))
     return [poly.evaluate(FieldElement(i)) for i in range(1, n + 1)]
 
-
 def reconstruct(shares, indices=None):
-    """Reconstruct secret from shares."""
     if indices is None:
         indices = list(range(1, len(shares) + 1))
     pts = [(FieldElement(i), s) for i, s in zip(indices, shares)]
@@ -25,14 +19,12 @@ def reconstruct(shares, indices=None):
 
 
 async def run_mul_test(a_val, b_val):
-    """Run multiplication test: compute [a]*[b] and verify."""
     n, f = 4, 1
-    net = Network(n)
+    net = Network(n, delay_model=UniformDelay(0.0, 0.002))
     mpc = [MPCArithmetic(i, n, f, net) for i in range(1, n + 1)]
     active = {1, 2, 3}
     for m in mpc:
         m.set_active_set(active)
-
     shares_a = make_sharing(n, f, a_val)
     shares_b = make_sharing(n, f, b_val)
 
@@ -52,12 +44,9 @@ async def run_mul_test(a_val, b_val):
 
     tasks = [asyncio.create_task(dispatch(i)) for i in range(n)]
     results = await asyncio.gather(*[
-        mpc[i].multiply(shares_a[i], shares_b[i], 'mul_test')
-        for i in range(n)
-    ])
+        mpc[i].multiply(shares_a[i], shares_b[i], 'mul_test') for i in range(n)])
     for t in tasks:
         t.cancel()
-
     product = reconstruct(results)
     return product.to_int()
 
@@ -66,10 +55,9 @@ def test_add_shares():
     n, f = 4, 1
     shares_a = make_sharing(n, f, 5)
     shares_b = make_sharing(n, f, 7)
-    mpc = MPCArithmetic(1, n, f, None)  # No network needed for local ops
+    mpc = MPCArithmetic(1, n, f, None)
     result = [mpc.add(shares_a[i], shares_b[i]) for i in range(n)]
     assert reconstruct(result) == 12
-
 
 def test_sub_shares():
     n, f = 4, 1
@@ -79,7 +67,6 @@ def test_sub_shares():
     result = [mpc.sub(shares_a[i], shares_b[i]) for i in range(n)]
     assert reconstruct(result) == 13
 
-
 def test_scalar_mul():
     n, f = 4, 1
     shares = make_sharing(n, f, 5)
@@ -87,39 +74,34 @@ def test_scalar_mul():
     result = [mpc.scalar_mul(FieldElement(3), shares[i]) for i in range(n)]
     assert reconstruct(result) == 15
 
-
 def test_multiply_basic():
-    async def _test():
+    asyncio.run((async_test := run_mul_test(5, 7))).__class__  # force run
+    async def _t():
         assert await run_mul_test(5, 7) == 35
-    asyncio.run(_test())
-
+    asyncio.run(_t())
 
 def test_multiply_by_zero():
-    async def _test():
+    async def _t():
         assert await run_mul_test(0, 13) == 0
-    asyncio.run(_test())
-
+    asyncio.run(_t())
 
 def test_multiply_by_one():
-    async def _test():
+    async def _t():
         assert await run_mul_test(1, 25) == 25
-    asyncio.run(_test())
-
+    asyncio.run(_t())
 
 def test_multiply_large():
-    async def _test():
+    async def _t():
         assert await run_mul_test(31, 30) == 930
-    asyncio.run(_test())
-
+    asyncio.run(_t())
 
 def test_open_value():
     async def _test():
         n, f = 4, 1
-        net = Network(n)
+        net = Network(n, delay_model=UniformDelay(0.0, 0.002))
         mpc = [MPCArithmetic(i, n, f, net) for i in range(1, n + 1)]
         for m in mpc:
             m.set_active_set({1, 2, 3})
-
         shares = make_sharing(n, f, 42)
 
         async def dispatch(idx):
@@ -135,11 +117,9 @@ def test_open_value():
 
         tasks = [asyncio.create_task(dispatch(i)) for i in range(n)]
         results = await asyncio.gather(*[
-            mpc[i].open_value(shares[i], 'open_test') for i in range(n)
-        ])
+            mpc[i].open_value(shares[i], 'open_test') for i in range(n)])
         for t in tasks:
             t.cancel()
-
         for r in results:
             assert r == 42
     asyncio.run(_test())

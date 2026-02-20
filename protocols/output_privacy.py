@@ -8,10 +8,10 @@ For each party's output [o_i]:
 """
 
 import asyncio
-from field import FieldElement
-from polynomial import Polynomial
-from network import Network, Message
-from mpc_arithmetic import MPCArithmetic
+from core.field import FieldElement
+from core.polynomial import Polynomial
+from sim.network import Network, Message
+from protocols.mpc_arithmetic import MPCArithmetic
 
 
 class OutputPrivacy:

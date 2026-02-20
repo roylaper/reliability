@@ -1,9 +1,9 @@
 """MPC arithmetic: addition (local) and multiplication (BGW with degree reduction)."""
 
 import asyncio
-from field import FieldElement
-from polynomial import Polynomial, lagrange_coefficients_at_zero
-from network import Network, Message
+from core.field import FieldElement
+from core.polynomial import Polynomial, lagrange_coefficients_at_zero
+from sim.network import Network, Message
 
 
 class MPCArithmetic:
@@ -75,7 +75,7 @@ class MPCArithmetic:
         self._ensure_reshare_session(session_id)
         await self._reshare_events[session_id].wait()
 
-        # Step 4: Recombine
+        # Step 4: Recombine using precomputed Lagrange coefficients
         result = FieldElement.zero()
         for idx, pid in enumerate(self._active_set):
             lambda_i = self._lagrange_coeffs[idx]

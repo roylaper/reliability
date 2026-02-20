@@ -1,10 +1,7 @@
 """Tests for polynomial operations and Lagrange interpolation."""
 
-import sys
-sys.path.insert(0, '..')
-
-from field import FieldElement
-from polynomial import Polynomial, lagrange_coefficients_at_zero
+from core.field import FieldElement
+from core.polynomial import Polynomial, lagrange_coefficients_at_zero
 
 
 def test_evaluate_constant():
@@ -12,36 +9,28 @@ def test_evaluate_constant():
     assert p.evaluate(FieldElement(0)) == 42
     assert p.evaluate(FieldElement(99)) == 42
 
-
 def test_evaluate_linear():
-    # p(x) = 3 + 2x
     p = Polynomial([FieldElement(3), FieldElement(2)])
     assert p.evaluate(FieldElement(0)) == 3
     assert p.evaluate(FieldElement(1)) == 5
     assert p.evaluate(FieldElement(5)) == 13
 
-
 def test_evaluate_quadratic():
-    # p(x) = 1 + 0*x + 1*x^2 = 1 + x^2
     p = Polynomial([FieldElement(1), FieldElement(0), FieldElement(1)])
     assert p.evaluate(FieldElement(0)) == 1
     assert p.evaluate(FieldElement(3)) == 10
-
 
 def test_random_polynomial():
     p = Polynomial.random(degree=1, constant=FieldElement(42))
     assert p.evaluate(FieldElement(0)) == 42
     assert p.degree == 1
 
-
 def test_interpolate_at_zero_degree1():
-    """Degree-1 polynomial: 2 points suffice."""
     secret = FieldElement(42)
     p = Polynomial.random(degree=1, constant=secret)
     pts = [(FieldElement(1), p.evaluate(FieldElement(1))),
            (FieldElement(2), p.evaluate(FieldElement(2)))]
     assert Polynomial.interpolate_at_zero(pts) == secret
-
 
 def test_interpolate_at_zero_degree1_other_points():
     secret = FieldElement(99)
@@ -50,26 +39,20 @@ def test_interpolate_at_zero_degree1_other_points():
            (FieldElement(4), p.evaluate(FieldElement(4)))]
     assert Polynomial.interpolate_at_zero(pts) == secret
 
-
 def test_interpolate_at_zero_degree2():
-    """Degree-2 polynomial: need 3 points."""
     secret = FieldElement(7)
     p = Polynomial([FieldElement(7), FieldElement(3), FieldElement(5)])
     pts = [(FieldElement(i), p.evaluate(FieldElement(i))) for i in range(1, 4)]
     assert Polynomial.interpolate_at_zero(pts) == secret
 
-
 def test_interpolate_overdetermined():
-    """More points than needed should still work."""
     secret = FieldElement(42)
     p = Polynomial.random(degree=1, constant=secret)
     pts = [(FieldElement(i), p.evaluate(FieldElement(i))) for i in range(1, 5)]
     assert Polynomial.interpolate_at_zero(pts) == secret
 
-
 def test_lagrange_coefficients():
     x_vals = [FieldElement(1), FieldElement(2)]
     lambdas = lagrange_coefficients_at_zero(x_vals)
-    # For points 1,2: lambda_1 = -2/(1-2) = 2, lambda_2 = -1/(2-1) = -1
     assert lambdas[0] == FieldElement(2)
     assert lambdas[1] == FieldElement(-1)

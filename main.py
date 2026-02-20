@@ -7,13 +7,13 @@ Uses theory-faithful protocols: RBC, BA, ACS, CSS with finalization.
 import asyncio
 import sys
 import time
-import rng
-from network import Network, DropAll, DropProb, UniformDelay, ExponentialDelay
-from beacon import RandomnessBeacon
+from core import rng
+from sim.network import Network, DropAll, DropProb, UniformDelay, ExponentialDelay
+from sim.beacon import RandomnessBeacon
 from party import Party
-from bit_decomposition import preprocess_random_bit_sharings
-from polynomial import Polynomial
-from field import FieldElement
+from circuits.bit_decomposition import preprocess_random_bit_sharings
+from core.polynomial import Polynomial
+from core.field import FieldElement
 
 
 NUM_RANDOM_BITS = 20  # 4 bids × 5 bits each

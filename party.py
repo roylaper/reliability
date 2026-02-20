@@ -5,18 +5,18 @@ and output privacy via mask-and-open.
 """
 
 import asyncio
-from field import FieldElement
-from network import Network, Message
-from beacon import RandomnessBeacon
-from rbc import RBCProtocol
-from ba import BAProtocol
-from css import CSSProtocol
-from acs import ACSProtocol
-from mpc_arithmetic import MPCArithmetic
-from bit_decomposition import BitDecomposition
-from comparison import ComparisonCircuit
-from output_privacy import OutputPrivacy
-from auction import SecondPriceAuction
+from core.field import FieldElement
+from sim.network import Network, Message
+from sim.beacon import RandomnessBeacon
+from protocols.rbc import RBCProtocol
+from protocols.ba import BAProtocol
+from protocols.css import CSSProtocol
+from protocols.acs import ACSProtocol
+from protocols.mpc_arithmetic import MPCArithmetic
+from circuits.bit_decomposition import BitDecomposition
+from circuits.comparison import ComparisonCircuit
+from protocols.output_privacy import OutputPrivacy
+from circuits.auction import SecondPriceAuction
 
 
 class Party:

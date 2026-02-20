@@ -5,8 +5,8 @@ if simple majority → adopt, else → use beacon coin.
 """
 
 import asyncio
-from network import Network, Message
-from beacon import RandomnessBeacon
+from sim.network import Network, Message
+from sim.beacon import RandomnessBeacon
 
 
 class BAInstance:

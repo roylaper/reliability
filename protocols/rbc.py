@@ -6,7 +6,7 @@ Thresholds for n=4, f=1: echo=n-f=3, ready_amplify=f+1=2, deliver=n-f=3.
 
 import asyncio
 import json
-from network import Network, Message
+from sim.network import Network, Message
 
 
 class RBCInstance:

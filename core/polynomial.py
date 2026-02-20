@@ -1,6 +1,6 @@
 """Polynomial operations and Lagrange interpolation over F_p."""
 
-from field import FieldElement
+from core.field import FieldElement
 
 
 class Polynomial:

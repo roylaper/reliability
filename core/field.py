@@ -1,6 +1,6 @@
 """Finite field arithmetic over F_p where p = 2^127 - 1 (Mersenne prime)."""
 
-import rng
+from core import rng
 
 PRIME = (1 << 127) - 1  # 2^127 - 1
 

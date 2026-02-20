@@ -1,7 +1,7 @@
 """Randomness beacon: provides random field elements when f+1 parties request."""
 
 import asyncio
-from field import FieldElement
+from core.field import FieldElement
 
 
 class RandomnessBeacon:

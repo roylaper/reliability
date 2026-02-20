@@ -5,12 +5,12 @@ the second-highest bid. Only the winner learns the second price.
 """
 
 import asyncio
-from field import FieldElement
-from mpc_arithmetic import MPCArithmetic
-from bit_decomposition import BitDecomposition
-from comparison import ComparisonCircuit
-from output_privacy import OutputPrivacy
-from network import Network
+from core.field import FieldElement
+from protocols.mpc_arithmetic import MPCArithmetic
+from circuits.bit_decomposition import BitDecomposition
+from circuits.comparison import ComparisonCircuit
+from protocols.output_privacy import OutputPrivacy
+from sim.network import Network
 
 
 class SecondPriceAuction:
