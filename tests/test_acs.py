@@ -5,6 +5,7 @@ from core import rng
 from sim.network import Network, UniformDelay, DropAll
 from sim.beacon import RandomnessBeacon
 from protocols.rbc import RBCProtocol
+from protocols.ba import BAProtocol
 from protocols.acs import ACSProtocol
 
 
@@ -15,22 +16,23 @@ async def run_acs_test(accepted_per_party, omitting=None, seed=30):
     net = Network(n, delay_model=UniformDelay(0.0, 0.002), omission_policy=policy)
     beacon = RandomnessBeacon(threshold=f + 1)
     rbcs = [RBCProtocol(i, n, f, net) for i in range(1, n + 1)]
-    acss = [ACSProtocol(i, n, f, net, beacon, rbcs[i - 1]) for i in range(1, n + 1)]
+    bas = [BAProtocol(i, n, f, net, beacon) for i in range(1, n + 1)]
+    acss = [ACSProtocol(i, n, f, net, beacon, rbcs[i - 1], bas[i - 1])
+            for i in range(1, n + 1)]
 
     async def dispatch(idx):
         while True:
             for s in range(1, n + 1):
                 if s == idx + 1:
                     continue
-                ch = net.channels[(s, idx + 1)]
-                msg = ch.try_receive()
+                msg = net.channels[(s, idx + 1)].try_receive()
                 if msg:
                     handlers = {
                         "RBC_INIT": rbcs[idx].handle_init,
                         "RBC_ECHO": rbcs[idx].handle_echo,
                         "RBC_READY": rbcs[idx].handle_ready,
-                        "BA_VOTE": acss[idx].ba.handle_vote,
-                        "BA_DECIDE": acss[idx].ba.handle_decide,
+                        "BA_VOTE": bas[idx].handle_vote,
+                        "BA_DECIDE": bas[idx].handle_decide,
                     }
                     h = handlers.get(msg.msg_type)
                     if h:
@@ -52,16 +54,15 @@ async def run_acs_test(accepted_per_party, omitting=None, seed=30):
 
 def test_acs_all_honest():
     async def _test():
-        accepted = [{1, 2, 3, 4}] * 4
-        results = await run_acs_test(accepted)
-        for i, r in enumerate(results):
+        results = await run_acs_test([{1,2,3,4}] * 4)
+        for r in results:
             assert r is not None
             assert len(r) >= 3
     asyncio.run(_test())
 
 def test_acs_one_omitter():
     async def _test():
-        accepted = [{1, 2, 3}, {1, 2, 3}, {1, 2, 3}, {1, 2, 3, 4}]
+        accepted = [{1,2,3}, {1,2,3}, {1,2,3}, {1,2,3,4}]
         results = await run_acs_test(accepted, omitting=4)
         for i in range(3):
             assert results[i] is not None
@@ -71,9 +72,8 @@ def test_acs_one_omitter():
 
 def test_acs_agreement():
     async def _test():
-        accepted = [{1, 2, 3, 4}] * 4
-        results = await run_acs_test(accepted)
-        honest_results = [r for r in results if r is not None]
-        assert len(honest_results) >= 3
-        assert all(r == honest_results[0] for r in honest_results)
+        results = await run_acs_test([{1,2,3,4}] * 4)
+        honest = [r for r in results if r is not None]
+        assert len(honest) >= 3
+        assert all(r == honest[0] for r in honest)
     asyncio.run(_test())

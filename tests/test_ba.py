@@ -20,8 +20,7 @@ async def run_ba_test(inputs, omitting=None, seed=20):
             for s in range(1, n + 1):
                 if s == idx + 1:
                     continue
-                ch = net.channels[(s, idx + 1)]
-                msg = ch.try_receive()
+                msg = net.channels[(s, idx + 1)].try_receive()
                 if msg:
                     h = {"BA_VOTE": bas[idx].handle_vote,
                          "BA_DECIDE": bas[idx].handle_decide}.get(msg.msg_type)
@@ -33,7 +32,7 @@ async def run_ba_test(inputs, omitting=None, seed=20):
     async def run_party(idx):
         try:
             return await asyncio.wait_for(
-                bas[idx].run(ba_index=0, initial_estimate=inputs[idx]), timeout=5.0)
+                bas[idx].run(ba_key="test", initial_estimate=inputs[idx]), timeout=5.0)
         except asyncio.TimeoutError:
             return None
     results = await asyncio.gather(*[run_party(i) for i in range(n)])
@@ -45,21 +44,21 @@ async def run_ba_test(inputs, omitting=None, seed=20):
 def test_ba_unanimous_1():
     async def _test():
         results, _ = await run_ba_test([1, 1, 1, 1])
-        for i, r in enumerate(results):
+        for r in results:
             assert r == 1
     asyncio.run(_test())
 
 def test_ba_unanimous_0():
     async def _test():
         results, _ = await run_ba_test([0, 0, 0, 0])
-        for i, r in enumerate(results):
+        for r in results:
             assert r == 0
     asyncio.run(_test())
 
 def test_ba_majority_1():
     async def _test():
         results, _ = await run_ba_test([1, 1, 1, 0])
-        for i, r in enumerate(results):
+        for r in results:
             if r is not None:
                 assert r == 1
     asyncio.run(_test())
@@ -77,6 +76,5 @@ def test_ba_with_omission():
         results, _ = await run_ba_test([1, 1, 1, 0], omitting=4)
         for i in range(3):
             assert results[i] is not None
-        decided = [r for r in results[:3]]
-        assert all(v == decided[0] for v in decided)
+        assert all(results[i] == results[0] for i in range(3))
     asyncio.run(_test())

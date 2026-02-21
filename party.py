@@ -38,9 +38,17 @@ class Party:
 
         # Protocol instances
         self.rbc = RBCProtocol(party_id, n, f, network)
+        self.ba = BAProtocol(party_id, n, f, network, beacon)
         self.css = CSSProtocol(party_id, n, f, network)
-        self.acs = ACSProtocol(party_id, n, f, network, beacon, self.rbc)
-        self.mpc = MPCArithmetic(party_id, n, f, network)
+        self.acs = ACSProtocol(party_id, n, f, network, beacon, self.rbc, self.ba)
+
+        # ACS factory for per-gate multiplication
+        def make_acs():
+            return ACSProtocol(party_id, n, f, network, beacon, self.rbc, self.ba)
+
+        self.mpc = MPCArithmetic(party_id, n, f, network,
+                                  css=self.css, rbc=self.rbc,
+                                  acs_factory=make_acs)
         self.bit_decomp = BitDecomposition(party_id, n, f, self.mpc)
         self.comparison = ComparisonCircuit(self.mpc)
         self.output_privacy = OutputPrivacy(party_id, n, f, network, self.mpc)
@@ -55,40 +63,34 @@ class Party:
         if mask_sharings:
             self._mask_shares = [ms[party_id] for ms in mask_sharings]
 
-        # Track CSS acceptances with an event that fires at n-f
+        # Track CSS acceptances
         self._accepted_dealers: set[int] = set()
         self._enough_accepted = asyncio.Event()
 
-        # Message dispatch table
+        # Message dispatch — CSS echo/ready + RBC/BA + MPC open + output privacy
         self._handlers = {
             "RBC_INIT": self.rbc.handle_init,
             "RBC_ECHO": self.rbc.handle_echo,
             "RBC_READY": self.rbc.handle_ready,
-            "BA_VOTE": self.acs.ba.handle_vote,
-            "BA_DECIDE": self.acs.ba.handle_decide,
+            "BA_VOTE": self.ba.handle_vote,
+            "BA_DECIDE": self.ba.handle_decide,
             "CSS_SHARE": self.css.handle_share,
             "CSS_ECHO": self.css.handle_echo,
             "CSS_READY": self.css.handle_ready,
             "CSS_RECOVER": self.css.handle_recover,
             "CSS_REVEAL": self.css.handle_reveal,
-            "MUL_RESHARE": self.mpc.handle_reshare,
             "MPC_OPEN": self.mpc.handle_open,
             "MASK_SHARE": self.output_privacy.handle_mask_share,
         }
 
     async def run(self) -> FieldElement | None:
-        """Main entry point. The outer timeout is a TEST HARNESS guard only,
-        not a protocol decision. Under the async model, honest parties
-        terminate with probability 1 (via beacon-driven BA)."""
+        """Main entry. Outer timeout is harness guard only."""
         dispatcher = asyncio.create_task(self._message_dispatcher())
-
         try:
             result = await asyncio.wait_for(
                 self._run_protocol(), timeout=self.protocol_timeout)
             return result
         except asyncio.TimeoutError:
-            # Harness guard — should not happen for honest parties
-            # under reasonable simulation delays
             return None
         finally:
             dispatcher.cancel()
@@ -98,23 +100,20 @@ class Party:
                 pass
 
     async def _run_protocol(self) -> FieldElement | None:
-        """Fully event-driven protocol. No timeouts in protocol logic."""
-
+        """Fully event-driven protocol."""
         # Phase 1: Share own bid via CSS
         my_session = f"input_{self.party_id}"
         await self.css.share(self.bid, my_session)
         self._accepted_dealers.add(self.party_id)
         self._check_enough_accepted()
 
-        # Phase 2: Wait for n-f CSS acceptances (event-driven, no timeout)
-        # Start background tasks that watch for each dealer's CSS to finalize
+        # Phase 2: Wait for n-f CSS acceptances (event-driven)
         for pid in range(1, self.n + 1):
             if pid != self.party_id:
                 asyncio.create_task(self._watch_css_acceptance(pid))
-
         await self._enough_accepted.wait()
 
-        # Phase 3: ACS (event-driven RBC + BA, no timeouts)
+        # Phase 3: ACS (event-driven RBC + BA)
         active_set = await self.acs.run(self._accepted_dealers)
 
         # Phase 4: Set active set for MPC
@@ -123,8 +122,7 @@ class Party:
         # Phase 5: Collect bid shares
         bid_shares = {}
         for pid in active_set:
-            session = f"input_{pid}"
-            bid_shares[pid] = self.css.get_share(session)
+            bid_shares[pid] = self.css.get_share(f"input_{pid}")
 
         # Phase 6: Run auction
         result = await self.auction.run(
@@ -132,9 +130,7 @@ class Party:
         return result
 
     async def _watch_css_acceptance(self, dealer_id: int):
-        """Watch for a dealer's CSS to finalize. Runs as background task."""
-        session = f"input_{dealer_id}"
-        await self.css.wait_accepted(session)
+        await self.css.wait_accepted(f"input_{dealer_id}")
         self._accepted_dealers.add(dealer_id)
         self._check_enough_accepted()
 
